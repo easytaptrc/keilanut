@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+
+    // ¿El usuario autenticado es dueño de este expediente? (por cuenta ID/contraseña o por su Gmail verificado)
+    function ownsMember(m) {
+      return signedIn() && (
+        m.authUid == request.auth.uid ||
+        (request.auth.token.email_verified == true && request.auth.token.email is string
+          && m.email == request.auth.token.email.lower())
+      );
+    }
+    function memberDoc(id) { return get(/databases/$(database)/documents/members/$(id)).data; }
+    function isMember(id) {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(id))
+        && ownsMember(memberDoc(id)) && memberDoc(id).get('active', true) != false;
+    }
+    function shortStr(v, max) { return v == null || (v is string && v.size() <= max); }
+    function onlyChanged(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // ---------- Alta única de la administradora ----------
+    match /meta/bootstrap {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.adminUid == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow update, delete: if false;
+    }
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/meta/bootstrap)
+        && existsAfter(/databases/$(database)/documents/meta/bootstrap)
+        && getAfter(/databases/$(database)/documents/meta/bootstrap).data.adminUid == uid;
+      allow update: if isAdmin() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // ---------- Ajustes ----------
+    match /settings/public {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/admin {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Reservaciones ----------
+    match /slots/{slotId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['date', 'time', 'bookingId'])
+        && request.resource.data.date is string && request.resource.data.time is string
+        && slotId == request.resource.data.date + '_' + request.resource.data.time.replace(':', '')
+        && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == request.resource.data.date
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.time == request.resource.data.time;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.memberId is string && isMember(resource.data.memberId));
+      allow create: if request.resource.data.status == 'pendiente'
+        && request.resource.data['service'] in ['online', 'presencial']
+        && request.resource.data.date is string && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.time is string && request.resource.data.time.matches('^[0-9]{2}:[0-9]{2}$')
+        && !request.resource.data.keys().hasAny(['price', 'paid', 'adminNotes', 'acceptedAt'])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().size() <= 70
+        && shortStr(request.resource.data.get('firstName', null), 80) && shortStr(request.resource.data.get('lastName', null), 120)
+        && shortStr(request.resource.data.get('email', null), 160) && shortStr(request.resource.data.get('phone', null), 40)
+        && shortStr(request.resource.data.get('notes', null), 4000) && shortStr(request.resource.data.get('motivation', null), 4000)
+        && shortStr(request.resource.data.get('diseases', null), 4000)
+        && (request.resource.data.get('memberId', null) == null || isMember(request.resource.data.memberId))
+        && existsAfter(/databases/$(database)/documents/slots/$(request.resource.data.date + '_' + request.resource.data.time.replace(':', '')))
+        && getAfter(/databases/$(database)/documents/slots/$(request.resource.data.date + '_' + request.resource.data.time.replace(':', ''))).data.bookingId == bookingId;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- Team ----------
+    match /logins/{memberId} {
+      allow read: if true;           // solo contiene el correo interno de acceso (sin datos personales)
+      allow write: if isAdmin();
+    }
+    match /counters/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /members/{memberId} {
+      allow read: if isAdmin() || ownsMember(resource.data);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        ownsMember(resource.data) && resource.data.get('active', true) != false
+        && onlyChanged(['photo', 'fcmTokens', 'googleLinked'])
+        && (request.resource.data.get('photo', null) == null
+            || (request.resource.data.photo is string && request.resource.data.photo.size() < 400000))
+        && (request.resource.data.get('fcmTokens', []) is list && request.resource.data.get('fcmTokens', []).size() <= 20)
+      );
+
+      match /plans/{kind} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow write: if isAdmin();
+      }
+      match /drafts/{kind} {
+        allow read, write: if isAdmin();
+      }
+      match /progress/{pid} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow create: if isAdmin() || (isMember(memberId) && request.resource.data.by == 'member'
+          && request.resource.data.date is string && shortStr(request.resource.data.get('notes', null), 1000));
+        allow update: if isAdmin();
+        allow delete: if isAdmin() || (isMember(memberId) && resource.data.by == 'member');
+      }
+      match /notifications/{nid} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || (isMember(memberId) && onlyChanged(['read']));
+      }
+    }
+
+    // ---------- Archivos PDF (fragmentados) ----------
+    match /files/{fileId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.ownerMemberId is string && isMember(resource.data.ownerMemberId));
+      allow write: if isAdmin();
+      match /chunks/{chunkId} {
+        allow read: if isAdmin()
+          || (signedIn() && get(/databases/$(database)/documents/files/$(fileId)).data.ownerMemberId is string
+              && isMember(get(/databases/$(database)/documents/files/$(fileId)).data.ownerMemberId));
+        allow write: if isAdmin();
+      }
+    }
+
+    // ---------- Solo administradora ----------
+    match /templates/{id} { allow read, write: if isAdmin(); }
+    match /broadcasts/{id} { allow read, write: if isAdmin(); }
+  }
+}
