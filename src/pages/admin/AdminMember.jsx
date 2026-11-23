@@ -5,18 +5,22 @@ import { db } from '../../firebase';
 import { useCol, useDoc } from '../../lib/hooks';
 import { Avatar, Badge, Empty, Field, Icon, Modal, PageLoader, useToast } from '../../components/ui';
 import ProgressPanel from '../../components/ProgressPanel';
+import ProgressPhotos from '../../components/ProgressPhotos';
+import FoodLog from '../../components/FoodLog';
+import ConsultWizard from './ConsultWizard';
+import { clinicalText } from '../../data/clinical';
 import PlanTab from './PlanTab';
 import { ClinicalSheet, CredentialsCard } from './AdminBookings';
-import { notifyMember, resetMemberAccess } from '../../lib/admin';
+import { mergeBookingAdmin, notifyMember, resetMemberAccess } from '../../lib/admin';
 import { ACTIVITY, BOOKING_STATUS, GOALS, SERVICES, ageFrom, cx, fmtDate, fullName, money, waLink } from '../../lib/utils';
 
-const TABS = { expediente: 'Expediente', dieta: 'Dieta', rutina: 'Rutina', progreso: 'Progreso', citas: 'Citas', avisar: 'Notificar', acceso: 'Acceso' };
+const TABS = { consulta: 'Consulta', expediente: 'Expediente', dieta: 'Dieta', rutina: 'Rutina', progreso: 'Progreso', comidas: 'Comidas', citas: 'Citas', avisar: 'Notificar', acceso: 'Acceso' };
 
 const EDITABLE = [
   ['firstName', 'Nombre(s)'], ['lastName', 'Apellidos'], ['email', 'Correo (Google)'], ['phone', 'Teléfono'], ['birthDate', 'Nacimiento', 'date'],
   ['heightCm', 'Estatura (cm)'], ['weightKg', 'Peso (kg)'], ['goalWeight', 'Peso meta (kg)'], ['mealsPerDay', 'Comidas al día'], ['trainingDays', 'Días de entrenamiento'],
   ['diseases', 'Enfermedades', 'area'], ['medications', 'Medicamentos', 'area'], ['allergies', 'Alergias'], ['intolerances', 'Intolerancias'], ['injuries', 'Lesiones'],
-  ['trainingSchedule', 'Horario de entrenamiento'], ['notes', 'Notas', 'area'],
+  ['trainingSchedule', 'Horario de entrenamiento'], ['nextReview', 'Próxima revisión', 'date'], ['notes', 'Notas', 'area'],
 ];
 
 function EditProfile({ m, onClose }) {
@@ -81,9 +85,12 @@ export default function AdminMember() {
   const { id } = useParams();
   const toast = useToast();
   const { data: m, loading } = useDoc(`members/${id}`);
-  const bookings = useCol('bookings', () => [where('memberId', '==', id)], 'mb' + id).list.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const priv = useCol('bookingAdmin', null, 'booking-admin-private').list;
+  const bookings = mergeBookingAdmin(useCol('bookings', () => [where('memberId', '==', id)], 'mb' + id).list, priv).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   const prices = useDoc('settings/admin').data?.prices || {};
   const [tab, setTab] = useState('expediente');
+  const clinical = useDoc(`members/${id}/clinical/history`).data;
+  const dietPlan = useDoc(`members/${id}/plans/diet`).data?.data;
   const [editing, setEditing] = useState(false);
   const [cred, setCred] = useState(null);
 
@@ -126,10 +133,24 @@ export default function AdminMember() {
       </div>
 
       <div className="fade-in" key={tab}>
-        {tab === 'expediente' && <ClinicalSheet p={m} />}
+        {tab === 'consulta' && <ConsultWizard member={m} onDone={() => setTab('expediente')} />}
+        {tab === 'expediente' && (
+          <div className="stack">
+            <div className="row">
+              {m.nextReview && <Badge tone="info" plain>Próxima revisión: {fmtDate(m.nextReview)}</Badge>}
+              {m.lastVisit && <Badge plain>Última consulta: {fmtDate(m.lastVisit)}</Badge>}
+              {m.clinicalStatus && <Badge tone="sage" plain>Historia clínica: {m.clinicalStatus}</Badge>}
+              <button className="btn sm" onClick={() => setTab('consulta')}><Icon name="edit" size={16} /> {clinical ? 'Editar consulta' : 'Iniciar consulta'}</button>
+            </div>
+            <ClinicalSheet p={m} />
+            {clinical ? <div className="card"><h4>Historial clínico nutricional</h4><pre className="clinical-pre">{clinicalText(clinical) || 'Sin respuestas todavía.'}</pre></div>
+              : <div className="notice">Aún no hay historial clínico. Cuando llegue {m.firstName} a consulta, usa la pestaña <b>Consulta</b>.</div>}
+          </div>
+        )}
         {tab === 'dieta' && <PlanTab member={m} kind="diet" />}
         {tab === 'rutina' && <PlanTab member={m} kind="routine" />}
-        {tab === 'progreso' && <ProgressPanel member={m} by="admin" />}
+        {tab === 'progreso' && <div className="stack" style={{ gap: 18 }}><ProgressPhotos member={m} by="admin" /><ProgressPanel member={m} by="admin" /></div>}
+        {tab === 'comidas' && <FoodLog member={m} readOnly targets={dietPlan?.calories ? { kcal: Number(dietPlan.calories), p: Number(dietPlan.macros?.protein) || 0, c: Number(dietPlan.macros?.carbs) || 0, f: Number(dietPlan.macros?.fat) || 0 } : null} />}
         {tab === 'citas' && (
           <div className="card">
             {!bookings.length ? <Empty icon="📅">Sin citas.</Empty> : (

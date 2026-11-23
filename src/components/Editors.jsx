@@ -1,81 +1,189 @@
+import { useState } from 'react';
 import { EXERCISES, EXERCISE_MAP, GROUPS } from '../data/exercises';
-import { GOALS } from '../lib/utils';
-import { ExerciseAnim, Field, Icon } from './ui';
+import { BLOCK_KINDS, FOOD_PHOTOS, MEAL_SLOTS, SUPPLEMENTS, TIP_IMAGES, WEEK_DAYS, foodPhoto, suppImg, tipImg } from '../data/planAssets';
+import { GOALS, cx } from '../lib/utils';
+import { ExerciseAnim, Field, Icon, Modal } from './ui';
 
 const lines = (arr) => (arr || []).join('\n');
 const unlines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+const move = (list, i, d) => { const j = i + d; if (j < 0 || j >= list.length) return list; const c = [...list]; [c[i], c[j]] = [c[j], c[i]]; return c; };
 
-function Mover({ list, i, onChange }) {
-  const move = (d) => {
-    const j = i + d;
-    if (j < 0 || j >= list.length) return;
-    const c = [...list];
-    [c[i], c[j]] = [c[j], c[i]];
-    onChange(c);
-  };
+function Mover({ list, i, onChange, label = 'elemento' }) {
   return (
-    <div className="row nowrap" style={{ gap: 4 }}>
-      <button type="button" className="btn link xs" onClick={() => move(-1)} aria-label="Subir">↑</button>
-      <button type="button" className="btn link xs" onClick={() => move(1)} aria-label="Bajar">↓</button>
-      <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => onChange(list.filter((_, k) => k !== i))} aria-label="Eliminar"><Icon name="trash" size={16} /></button>
+    <div className="row nowrap" style={{ gap: 2 }}>
+      <button type="button" className="btn link xs" onClick={() => onChange(move(list, i, -1))} aria-label={`Subir ${label}`}>↑</button>
+      <button type="button" className="btn link xs" onClick={() => onChange(move(list, i, 1))} aria-label={`Bajar ${label}`}>↓</button>
+      <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => window.confirm(`¿Quitar ${label}?`) && onChange(list.filter((_, k) => k !== i))} aria-label={`Quitar ${label}`}><Icon name="trash" size={16} /></button>
+    </div>
+  );
+}
+
+function PhotoPicker({ value, onPick, onClose }) {
+  const [q, setQ] = useState('');
+  const list = FOOD_PHOTOS.filter((p) => !q || `${p.label} ${p.tags}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <Modal wide title="Foto del platillo" onClose={onClose}>
+      <input className="input mb" placeholder="Buscar: pollo, huevo, avena…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="pick-grid">
+        <button type="button" className={cx('pick', !value && 'on')} onClick={() => onPick('')}><div className="pick-none">Sin foto</div><span>Sin foto</span></button>
+        {list.map((p) => (
+          <button type="button" key={p.key} className={cx('pick', value === p.key && 'on')} onClick={() => onPick(p.key)}>
+            <img src={foodPhoto(p.key)} alt="" loading="lazy" /><span>{p.label}</span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function SectionsEditor({ sections, onChange }) {
+  const set = (i, patch) => onChange(sections.map((s, k) => (k === i ? { ...s, ...patch } : s)));
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {sections.map((s, i) => (
+        <div key={i} className="section-edit">
+          <div className="row nowrap">
+            <input className="input sm grow" value={s.label} placeholder="Título (Utilizar, Toppings, Opciones…)" onChange={(e) => set(i, { label: e.target.value })} />
+            <Mover list={sections} i={i} onChange={onChange} label="sección" />
+          </div>
+          <textarea className="textarea sm" rows={Math.max(2, s.items.length)} value={lines(s.items)} placeholder="Un renglón por ingrediente o indicación" onChange={(e) => set(i, { items: e.target.value.split('\n') })} onBlur={(e) => set(i, { items: unlines(e.target.value) })} />
+        </div>
+      ))}
+      <div className="row" style={{ gap: 4 }}>
+        {['Utilizar', 'Elige solo una opción para acompañar', 'Toppings', 'Acompañar con'].map((l) => (
+          <button type="button" key={l} className="btn link xs" onClick={() => onChange([...sections, { label: l, items: [] }])}>+ {l}</button>
+        ))}
+      </div>
     </div>
   );
 }
 
 export function DietEditor({ value, onChange }) {
   const v = value;
+  const [day, setDay] = useState(0);
+  const [photoFor, setPhotoFor] = useState(null);
   const set = (k, x) => onChange({ ...v, [k]: x });
-  const setMeal = (i, m) => set('meals', v.meals.map((x, k) => (k === i ? m : x)));
+  const days = v.days || [];
+  const d = days[day];
+  const setDayData = (patch) => set('days', days.map((x, k) => (k === day ? { ...x, ...patch } : x)));
+  const setMeal = (i, patch) => setDayData({ meals: d.meals.map((m, k) => (k === i ? { ...m, ...patch } : m)) });
+
+  const addDay = () => {
+    const name = WEEK_DAYS[days.length] || `DÍA ${days.length + 1}`;
+    set('days', [...days, { day: name, tip: { text: '', image: '' }, meals: ['ALMUERZO', 'COMIDA', 'CENA'].map((slot) => ({ slot, title: '', photo: '', sections: [{ label: 'Utilizar', items: [] }] })) }]);
+    setDay(days.length);
+  };
+  const duplicateDay = () => {
+    const copy = structuredClone(d);
+    copy.day = WEEK_DAYS[days.length] || `DÍA ${days.length + 1}`;
+    set('days', [...days, copy]);
+    setDay(days.length);
+  };
+
   return (
-    <div className="stack" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       <div className="grid g2">
-        <Field label="Título"><input className="input" value={v.title || ''} onChange={(e) => set('title', e.target.value)} /></Field>
-        <Field label="Objetivo">
-          <select className="select" value={v.goal || ''} onChange={(e) => set('goal', e.target.value)}>
-            <option value="">—</option>{Object.entries(GOALS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-        </Field>
+        <Field label="Título del plan"><input className="input" value={v.title || ''} onChange={(e) => set('title', e.target.value)} /></Field>
+        <Field label="Objetivo"><select className="select" value={v.goal || ''} onChange={(e) => set('goal', e.target.value)}><option value="">—</option>{Object.entries(GOALS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
       </div>
       <div className="grid g4">
+        <Field label="Check del"><input className="input" type="date" value={v.checkFrom || ''} onChange={(e) => set('checkFrom', e.target.value)} /></Field>
+        <Field label="Check al"><input className="input" type="date" value={v.checkTo || ''} onChange={(e) => set('checkTo', e.target.value)} /></Field>
+        <Field label="Cambio de plan"><input className="input" type="date" value={v.nextChange || ''} onChange={(e) => set('nextChange', e.target.value)} /></Field>
+        <Field label="Agua (L/día)"><input className="input" inputMode="decimal" value={v.waterLiters ?? ''} onChange={(e) => set('waterLiters', e.target.value)} /></Field>
         <Field label="Calorías (kcal)"><input className="input" inputMode="numeric" value={v.calories ?? ''} onChange={(e) => set('calories', e.target.value === '' ? '' : Number(e.target.value))} /></Field>
         {['protein', 'carbs', 'fat'].map((k) => (
           <Field key={k} label={{ protein: 'Proteína (g)', carbs: 'Carbohidratos (g)', fat: 'Grasas (g)' }[k]}>
             <input className="input" inputMode="numeric" value={v.macros?.[k] ?? ''} onChange={(e) => set('macros', { ...v.macros, [k]: e.target.value === '' ? '' : Number(e.target.value) })} />
           </Field>
         ))}
-        <Field label="Agua (L)"><input className="input" inputMode="decimal" value={v.waterLiters ?? ''} onChange={(e) => set('waterLiters', e.target.value === '' ? '' : Number(e.target.value))} /></Field>
       </div>
 
-      <div className="stack">
-        <div className="row between"><h4 style={{ margin: 0 }}>Comidas</h4>
-          <button type="button" className="btn light sm" onClick={() => set('meals', [...(v.meals || []), { name: 'Nueva comida', time: '', items: [{ food: '', qty: '' }], notes: '' }])}><Icon name="plus" size={16} /> Comida</button>
+      <div className="card flat stack" style={{ padding: 14 }}>
+        <h4 style={{ margin: 0 }}>Inicia tu día todos los días con…</h4>
+        <div className="row nowrap">
+          <input className="input grow" value={v.dailyTip?.text || ''} placeholder="Ej. Un shot de kéfir en ayunas (o una tableta de probióticos)." onChange={(e) => set('dailyTip', { ...v.dailyTip, text: e.target.value })} />
+          <select className="select sm" style={{ width: 150 }} value={v.dailyTip?.image || ''} onChange={(e) => set('dailyTip', { ...v.dailyTip, image: e.target.value })}>
+            <option value="">Sin imagen</option>{TIP_IMAGES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
         </div>
-        {(v.meals || []).map((m, i) => (
-          <div key={i} className="card flat stack" style={{ gap: 10, padding: 14 }}>
-            <div className="row nowrap">
-              <input className="input sm grow" value={m.name} onChange={(e) => setMeal(i, { ...m, name: e.target.value })} placeholder="Nombre" />
-              <input className="input sm" style={{ width: 96 }} value={m.time} onChange={(e) => setMeal(i, { ...m, time: e.target.value })} placeholder="08:00" />
-              <Mover list={v.meals} i={i} onChange={(x) => set('meals', x)} />
-            </div>
-            {(m.items || []).map((it, j) => (
-              <div key={j} className="editor-row">
-                <input className="input sm" value={it.food} placeholder="Alimento" onChange={(e) => setMeal(i, { ...m, items: m.items.map((x, k) => (k === j ? { ...x, food: e.target.value } : x)) })} />
-                <input className="input sm" value={it.qty} placeholder="Cantidad" onChange={(e) => setMeal(i, { ...m, items: m.items.map((x, k) => (k === j ? { ...x, qty: e.target.value } : x)) })} />
-                <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => setMeal(i, { ...m, items: m.items.filter((_, k) => k !== j) })}><Icon name="x" size={16} /></button>
-              </div>
-            ))}
-            <div className="row between">
-              <button type="button" className="btn link xs" onClick={() => setMeal(i, { ...m, items: [...(m.items || []), { food: '', qty: '' }] })}>+ Alimento</button>
-            </div>
-            <input className="input sm" value={m.notes || ''} placeholder="Notas / equivalentes" onChange={(e) => setMeal(i, { ...m, notes: e.target.value })} />
+      </div>
+
+      <div className="card flat stack" style={{ padding: 14 }}>
+        <h4 style={{ margin: 0 }}>Suplementos sugeridos</h4>
+        <div className="supp-pick">
+          {SUPPLEMENTS.map((s) => {
+            const on = (v.supplements || []).some((x) => x.key === s.key);
+            return (
+              <button type="button" key={s.key} className={cx('supp-chip', on && 'on')} onClick={() => set('supplements', on ? v.supplements.filter((x) => x.key !== s.key) : [...(v.supplements || []), { key: s.key, name: s.name, when: 'En ayunas', dose: s.dose }])}>
+                <img src={suppImg(s.key)} alt="" loading="lazy" /><span>{s.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        {(v.supplements || []).map((s, i) => (
+          <div key={s.key + i} className="supp-row">
+            <img src={suppImg(s.key)} alt="" />
+            <input className="input sm" value={s.name} onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
+            <select className="select sm" value={s.when} onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, when: e.target.value } : x)))}>
+              {['En ayunas', 'Después del desayuno', 'Antes de entrenar', 'Después de entrenar', 'Con la comida', 'Antes de dormir'].map((w) => <option key={w}>{w}</option>)}
+            </select>
+            <input className="input sm" value={s.dose} placeholder="Dosis" onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, dose: e.target.value } : x)))} />
           </div>
         ))}
       </div>
+
+      <div className="stack">
+        <div className="row between">
+          <div className="tabs">
+            {days.map((x, i) => <button key={i} type="button" className={cx('tab', i === day && 'on')} onClick={() => setDay(i)}>{x.day || `Día ${i + 1}`}</button>)}
+          </div>
+          <div className="row">
+            {d && <button type="button" className="btn light sm" onClick={duplicateDay}><Icon name="copy" size={16} /> Duplicar día</button>}
+            <button type="button" className="btn light sm" onClick={addDay}><Icon name="plus" size={16} /> Día</button>
+          </div>
+        </div>
+        {!d ? <p className="muted small">Agrega el primer día del plan.</p> : (
+          <div className="card flat stack fade-in" key={day} style={{ padding: 14 }}>
+            <div className="row nowrap">
+              <input className="input grow" value={d.day} onChange={(e) => setDayData({ day: e.target.value.toUpperCase() })} aria-label="Nombre del día" />
+              <Mover list={days} i={day} onChange={(x) => { set('days', x); setDay(0); }} label="día" />
+            </div>
+            <div className="row nowrap">
+              <input className="input sm grow" value={d.tip?.text || ''} placeholder="Tip del día (ej. Puedes acompañar una comida con agua de jamaica…)" onChange={(e) => setDayData({ tip: { ...d.tip, text: e.target.value } })} />
+              <select className="select sm" style={{ width: 150 }} value={d.tip?.image || ''} onChange={(e) => setDayData({ tip: { ...d.tip, image: e.target.value } })}>
+                <option value="">Sin imagen</option>{TIP_IMAGES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+              {d.tip?.image && <img src={tipImg(d.tip.image)} alt="" style={{ width: 34, height: 34, objectFit: 'contain' }} />}
+            </div>
+            {d.meals.map((m, i) => (
+              <div key={i} className="meal-edit">
+                <button type="button" className="meal-photo" onClick={() => setPhotoFor(i)} title="Cambiar foto">
+                  {m.photo ? <img src={foodPhoto(m.photo)} alt="" /> : <span><Icon name="camera" size={20} /><br />Foto</span>}
+                </button>
+                <div className="stack grow" style={{ gap: 8, minWidth: 0 }}>
+                  <div className="row nowrap">
+                    <select className="select sm" style={{ maxWidth: 190 }} value={m.slot} onChange={(e) => setMeal(i, { slot: e.target.value })}>
+                      {[...new Set([...MEAL_SLOTS, m.slot])].map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    <input className="input sm grow" value={m.title} placeholder="Nombre del platillo" onChange={(e) => setMeal(i, { title: e.target.value.toUpperCase() })} />
+                    <Mover list={d.meals} i={i} onChange={(x) => setDayData({ meals: x })} label="comida" />
+                  </div>
+                  <SectionsEditor sections={m.sections || []} onChange={(x) => setMeal(i, { sections: x })} />
+                </div>
+              </div>
+            ))}
+            <button type="button" className="btn link xs" style={{ alignSelf: 'flex-start' }} onClick={() => setDayData({ meals: [...d.meals, { slot: 'SNACK MEDIA TARDE', title: '', photo: '', sections: [{ label: 'Utilizar', items: [] }] }] })}>+ Agregar comida o snack</button>
+          </div>
+        )}
+      </div>
+
       <div className="grid g2">
-        <Field label="Recomendaciones (una por línea)"><textarea className="textarea" value={lines(v.recommendations)} onChange={(e) => set('recommendations', unlines(e.target.value))} /></Field>
-        <Field label="Evitar (una por línea)"><textarea className="textarea" value={lines(v.avoid)} onChange={(e) => set('avoid', unlines(e.target.value))} /></Field>
+        <Field label="Recomendaciones (una por renglón)"><textarea className="textarea" value={lines(v.recommendations)} onChange={(e) => set('recommendations', e.target.value.split('\n'))} onBlur={(e) => set('recommendations', unlines(e.target.value))} /></Field>
+        <Field label="Evitar (una por renglón)"><textarea className="textarea" value={lines(v.avoid)} onChange={(e) => set('avoid', e.target.value.split('\n'))} onBlur={(e) => set('avoid', unlines(e.target.value))} /></Field>
       </div>
       <Field label="Notas para el paciente"><textarea className="textarea" value={v.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
+      {photoFor != null && d && <PhotoPicker value={d.meals[photoFor]?.photo} onClose={() => setPhotoFor(null)} onPick={(k) => { setMeal(photoFor, { photo: k }); setPhotoFor(null); }} />}
     </div>
   );
 }
@@ -95,61 +203,66 @@ function ExerciseSelect({ value, onChange }) {
 
 export function RoutineEditor({ value, onChange }) {
   const v = value;
+  const [day, setDay] = useState(0);
   const set = (k, x) => onChange({ ...v, [k]: x });
-  const setDay = (i, d) => set('days', v.days.map((x, k) => (k === i ? d : x)));
+  const days = v.days || [];
+  const d = days[day];
+  const setDayData = (patch) => set('days', days.map((x, k) => (k === day ? { ...x, ...patch } : x)));
+  const setBlock = (i, patch) => setDayData({ blocks: d.blocks.map((b, k) => (k === i ? { ...b, ...patch } : b)) });
+
   return (
-    <div className="stack" style={{ gap: 18 }}>
+    <div className="stack" style={{ gap: 20 }}>
       <div className="grid g4">
         <Field label="Título" className="span2"><input className="input" value={v.title || ''} onChange={(e) => set('title', e.target.value)} /></Field>
-        <Field label="Días/semana"><input className="input" inputMode="numeric" value={v.daysPerWeek ?? ''} onChange={(e) => set('daysPerWeek', Number(e.target.value) || '')} /></Field>
-        <Field label="Nivel">
-          <select className="select" value={v.level || ''} onChange={(e) => set('level', e.target.value)}>
-            <option value="principiante">Principiante</option><option value="intermedio">Intermedio</option><option value="avanzado">Avanzado</option>
-          </select>
-        </Field>
+        <Field label="Horario de entrenamiento"><input className="input" value={v.schedule || ''} placeholder="4:00 PM – 5:30 PM" onChange={(e) => set('schedule', e.target.value)} /></Field>
+        <Field label="Nivel"><select className="select" value={v.level || ''} onChange={(e) => set('level', e.target.value)}><option value="principiante">Principiante</option><option value="intermedio">Intermedio</option><option value="avanzado">Avanzado</option></select></Field>
+        <Field label="Objetivo" className="span2"><select className="select" value={v.goal || ''} onChange={(e) => set('goal', e.target.value)}><option value="">—</option>{Object.entries(GOALS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+        <Field label="Días por semana"><input className="input" inputMode="numeric" value={v.daysPerWeek ?? ''} onChange={(e) => set('daysPerWeek', Number(e.target.value) || '')} /></Field>
       </div>
-      <div className="grid g3">
-        <Field label="Objetivo">
-          <select className="select" value={v.goal || ''} onChange={(e) => set('goal', e.target.value)}>
-            <option value="">—</option>{Object.entries(GOALS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-        </Field>
-        <Field label="Calentamiento"><input className="input" value={v.warmup || ''} onChange={(e) => set('warmup', e.target.value)} /></Field>
-        <Field label="Enfriamiento"><input className="input" value={v.cooldown || ''} onChange={(e) => set('cooldown', e.target.value)} /></Field>
+      <div className="row between">
+        <div className="tabs">{days.map((x, i) => <button key={i} type="button" className={cx('tab', i === day && 'on')} onClick={() => setDay(i)}>{x.name || `Día ${i + 1}`}</button>)}</div>
+        <button type="button" className="btn light sm" onClick={() => { set('days', [...days, { name: `DÍA ${days.length + 1}`, warmup: 'Estiramiento y calentamiento dinámico en la parte a trabajar.', blocks: [], cardio: '' }]); setDay(days.length); }}><Icon name="plus" size={16} /> Día</button>
       </div>
-      <div className="row between"><h4 style={{ margin: 0 }}>Días</h4>
-        <button type="button" className="btn light sm" onClick={() => set('days', [...(v.days || []), { name: `Día ${(v.days?.length || 0) + 1}`, focus: '', cardio: '', exercises: [] }])}><Icon name="plus" size={16} /> Día</button>
-      </div>
-      {(v.days || []).map((d, i) => (
-        <div key={i} className="card flat stack" style={{ gap: 10, padding: 14 }}>
+      {d && (
+        <div className="card flat stack fade-in" key={day} style={{ padding: 14 }}>
           <div className="row nowrap">
-            <input className="input sm grow" value={d.name} onChange={(e) => setDay(i, { ...d, name: e.target.value })} />
-            <Mover list={v.days} i={i} onChange={(x) => set('days', x)} />
+            <input className="input grow" value={d.name} onChange={(e) => setDayData({ name: e.target.value.toUpperCase() })} aria-label="Nombre del día" />
+            <Mover list={days} i={day} onChange={(x) => { set('days', x); setDay(0); }} label="día" />
           </div>
-          {(d.exercises || []).map((x, j) => {
-            const upd = (patch) => setDay(i, { ...d, exercises: d.exercises.map((y, k) => (k === j ? { ...y, ...patch } : y)) });
-            return (
-              <div key={j} className="row nowrap" style={{ alignItems: 'flex-start', borderBottom: '1px dashed var(--line)', paddingBottom: 10 }}>
-                <div style={{ width: 70, flex: 'none' }}><ExerciseAnim id={x.exerciseId} tag={false} /></div>
-                <div className="grow stack" style={{ gap: 6 }}>
-                  <ExerciseSelect value={x.exerciseId} onChange={(id) => upd({ exerciseId: id, name: EXERCISE_MAP[id]?.name || x.name })} />
-                  {!x.exerciseId && <input className="input sm" placeholder="Nombre del ejercicio" value={x.name || ''} onChange={(e) => upd({ name: e.target.value })} />}
-                  <div className="row nowrap" style={{ gap: 6 }}>
-                    <input className="input sm" style={{ width: 64 }} placeholder="Series" value={x.sets ?? ''} onChange={(e) => upd({ sets: e.target.value })} />
-                    <input className="input sm" style={{ width: 84 }} placeholder="Reps" value={x.reps ?? ''} onChange={(e) => upd({ reps: e.target.value })} />
-                    <input className="input sm grow" placeholder="Descanso" value={x.rest ?? ''} onChange={(e) => upd({ rest: e.target.value })} />
-                  </div>
-                  <input className="input sm" placeholder="Notas (tempo, carga, técnica)" value={x.notes || ''} onChange={(e) => upd({ notes: e.target.value })} />
-                </div>
-                <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => setDay(i, { ...d, exercises: d.exercises.filter((_, k) => k !== j) })}><Icon name="trash" size={16} /></button>
+          <input className="input sm" value={d.warmup || ''} placeholder="Calentamiento" onChange={(e) => setDayData({ warmup: e.target.value })} />
+          {d.blocks.map((b, i) => (
+            <div key={i} className="block-edit">
+              <div className="row block-head">
+                <select className="select sm" style={{ flex: '1 1 150px', minWidth: 0 }} value={b.kind} onChange={(e) => setBlock(i, { kind: e.target.value })}>{[...new Set([...BLOCK_KINDS, b.kind])].map((k) => <option key={k}>{k}</option>)}</select>
+                <input className="input sm" style={{ width: 80 }} inputMode="numeric" value={b.sets} onChange={(e) => setBlock(i, { sets: Number(e.target.value) || '' })} aria-label="Series" />
+                <span className="tiny muted">series</span>
+                <span className="grow hide-sm" />
+                <Mover list={d.blocks} i={i} onChange={(x) => setDayData({ blocks: x })} label="bloque" />
               </div>
-            );
-          })}
-          <button type="button" className="btn link xs" style={{ alignSelf: 'flex-start' }} onClick={() => setDay(i, { ...d, exercises: [...(d.exercises || []), { exerciseId: '', name: '', sets: 3, reps: '12', rest: '60 s', notes: '' }] })}>+ Ejercicio</button>
-          <input className="input sm" placeholder="Cardio del día (opcional)" value={d.cardio || ''} onChange={(e) => setDay(i, { ...d, cardio: e.target.value })} />
+              {b.exercises.map((x, j) => {
+                const upd = (patch) => setBlock(i, { exercises: b.exercises.map((y, k) => (k === j ? { ...y, ...patch } : y)) });
+                return (
+                  <div key={j} className="row nowrap" style={{ alignItems: 'flex-start' }}>
+                    <div style={{ width: 64, flex: 'none' }}><ExerciseAnim id={x.exerciseId} tag={false} /></div>
+                    <div className="stack grow" style={{ gap: 6, minWidth: 0 }}>
+                      <ExerciseSelect value={x.exerciseId} onChange={(id) => upd({ exerciseId: id, name: EXERCISE_MAP[id]?.name || x.name })} />
+                      <input className="input sm" placeholder="Nombre como aparecerá" value={x.name || ''} onChange={(e) => upd({ name: e.target.value })} />
+                      <textarea className="textarea sm" rows={2} placeholder="Indicaciones (repeticiones, tempo, aproximación…)" value={x.detail || ''} onChange={(e) => upd({ detail: e.target.value })} />
+                    </div>
+                    <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => setBlock(i, { exercises: b.exercises.filter((_, k) => k !== j) })} aria-label="Quitar ejercicio"><Icon name="x" size={16} /></button>
+                  </div>
+                );
+              })}
+              <button type="button" className="btn link xs" style={{ alignSelf: 'flex-start' }} onClick={() => setBlock(i, { exercises: [...b.exercises, { exerciseId: '', name: '', detail: '' }] })}>+ Ejercicio</button>
+            </div>
+          ))}
+          <div className="row" style={{ gap: 4 }}>
+            {BLOCK_KINDS.map((k) => <button type="button" key={k} className="btn link xs" onClick={() => setDayData({ blocks: [...d.blocks, { kind: k, sets: 3, exercises: [{ exerciseId: '', name: '', detail: '' }] }] })}>+ {k}</button>)}
+          </div>
+          <input className="input sm" value={d.cardio || ''} placeholder="Cardio del día (opcional)" onChange={(e) => setDayData({ cardio: e.target.value })} />
         </div>
-      ))}
-      <Field label="Notas generales"><textarea className="textarea" value={v.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
+      )}
+      <Field label="Indicaciones generales"><textarea className="textarea" value={v.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
     </div>
   );
 }

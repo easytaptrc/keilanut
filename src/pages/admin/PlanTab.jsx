@@ -5,7 +5,9 @@ import { useCol, useDoc, useProgress } from '../../lib/hooks';
 import { DietEditor, RoutineEditor } from '../../components/Editors';
 import { DietView, RoutineView } from '../../components/PlanViews';
 import { Badge, Empty, Field, Icon, Modal, Spinner, useToast } from '../../components/ui';
-import { draftDiet, draftRoutine, emptyDiet, emptyRoutine, energy } from '../../lib/nutrition';
+import { energy } from '../../lib/nutrition';
+import { draftDiet, draftRoutine, emptyDiet, emptyRoutine, normalizeDiet, normalizeRoutine } from '../../lib/plans';
+import { useContact } from '../Home';
 
 import { notifyMember } from '../../lib/admin';
 import { deleteFile, uploadFile } from '../../lib/files';
@@ -21,6 +23,9 @@ export default function PlanTab({ member, kind }) {
   const settings = useDoc('settings/admin').data;
   const templates = useCol('templates', () => [where('type', '==', kind)], 'tpl' + kind).list;
   const progress = useProgress(member.id).list;
+  const clinical = useDoc(`members/${member.id}/clinical/history`).data;
+  const contact = useContact();
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [value, setValue] = useState(null);
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState('edit');
@@ -33,7 +38,7 @@ export default function PlanTab({ member, kind }) {
   useEffect(() => {
     if (value || pub.loading || draft.loading) return;
     const src = draft.data || pub.data;
-    setValue(src?.data || (isDiet ? emptyDiet() : emptyRoutine()));
+    setValue(src?.data ? (isDiet ? normalizeDiet(src.data) : normalizeRoutine(src.data)) : (isDiet ? emptyDiet() : emptyRoutine()));
     setFile(src?.file || null);
   }, [pub.loading, draft.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -48,6 +53,8 @@ export default function PlanTab({ member, kind }) {
   };
 
   const publish = async () => {
+    if (isDiet && !value.days?.length) return toast('Agrega al menos un día a la dieta antes de publicar.', 'err');
+    if (!isDiet && !value.days?.length) return toast('Agrega al menos un día a la rutina antes de publicar.', 'err');
     if (!window.confirm(`¿Publicar esta ${label}? ${member.firstName} la verá en su app y recibirá una notificación.`)) return;
     setBusy(true);
     try {
@@ -73,7 +80,7 @@ export default function PlanTab({ member, kind }) {
 
   const auto = () => {
     if (dirty && !window.confirm('Esto reemplazará el contenido actual del editor. ¿Continuar?')) return;
-    change(isDiet ? draftDiet(member) : draftRoutine(member));
+    change(isDiet ? draftDiet({ ...member, clinical }) : draftRoutine(member));
     toast('Borrador automático generado. Revísalo antes de publicar.', 'ok');
   };
 
@@ -83,7 +90,7 @@ export default function PlanTab({ member, kind }) {
       const chosen = templates.filter((t) => ai.selected.includes(t.id));
       const { generateWithAI } = await import('../../lib/ai');
       const result = await generateWithAI({
-        kind, profile: member, progress, templates: chosen, instructions: ai.instructions,
+        kind, profile: member, progress, clinical, templates: chosen, instructions: ai.instructions,
         apiKey: settings?.anthropicKey, model: settings?.model, onStatus: (s) => setAi((x) => ({ ...x, status: s })),
       });
       const { rationale, ...plan } = result;
@@ -127,7 +134,7 @@ export default function PlanTab({ member, kind }) {
         <div className="row">
           <button className="btn light sm" disabled={busy} onClick={() => fileRef.current.click()}><Icon name="upload" size={16} /> {file ? 'Cambiar PDF' : 'Adjuntar PDF'}</button>
           <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={onPdf} />
-          <button className="btn light sm" onClick={() => pdfLib().then((m) => (isDiet ? m.dietPdf(value, member) : m.routinePdf(value, member))).catch((er) => toast(er.message, 'err'))}><Icon name="download" size={16} /> Exportar PDF</button>
+          <button className="btn light sm" disabled={pdfBusy} onClick={() => { setPdfBusy(true); pdfLib().then((m) => (isDiet ? m.dietPdf(value, member, { contact }) : m.routinePdf(value, member, { contact }))).catch((er) => toast(er.message, 'err')).finally(() => setPdfBusy(false)); }}>{pdfBusy ? <Spinner /> : <Icon name="download" size={16} />} PDF con mi diseño</button>
         </div>
       </div>
       {file && (
@@ -159,7 +166,7 @@ export default function PlanTab({ member, kind }) {
                 <div className="stack" style={{ gap: 8 }}>
                   {templates.map((t) => (
                     <label key={t.id} className="row nowrap card flat" style={{ padding: 10, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={ai.selected.includes(t.id)} style={{ width: 18, height: 18, accentColor: '#5e6f4f' }}
+                      <input type="checkbox" checked={ai.selected.includes(t.id)} style={{ width: 18, height: 18, accentColor: '#6e2236' }}
                         onChange={(ev) => setAi((x) => ({ ...x, selected: ev.target.checked ? [...x.selected, t.id] : x.selected.filter((y) => y !== t.id) }))} />
                       <div className="grow"><b className="small">{t.title}</b><div className="tiny muted">{t.purpose}</div></div>
                       <Badge plain>{Math.round((t.size || 0) / 1024)} KB</Badge>

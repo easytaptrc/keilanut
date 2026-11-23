@@ -3,7 +3,7 @@ import { addDoc, collection, deleteDoc, doc, orderBy, serverTimestamp } from 'fi
 import { db } from '../../firebase';
 import { useCol } from '../../lib/hooks';
 import { Badge, Empty, Field, Icon, Modal, useToast } from '../../components/ui';
-import { deleteFile, openFile, uploadFile } from '../../lib/files';
+import { MAX_PDF_BYTES, deleteFile, openFile, uploadFile } from '../../lib/files';
 import { GOALS, cx, fmtDate } from '../../lib/utils';
 
 export default function AdminTemplates() {
@@ -13,23 +13,28 @@ export default function AdminTemplates() {
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ title: '', purpose: '', goal: '', notes: '', file: null });
   const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState('');
   const fileRef = useRef();
 
   const save = async () => {
     if (!f.title.trim() || !f.purpose.trim() || !f.file) return toast('Completa título, para qué es y el PDF', 'err');
     setBusy(true);
     try {
-      const up = await uploadFile(f.file, { kind: 'template' });
-      await addDoc(collection(db, 'templates'), { type, title: f.title.trim(), purpose: f.purpose.trim(), goal: f.goal, notes: f.notes.trim(), fileId: up.id, fileName: up.name, size: up.size, createdAt: serverTimestamp() });
+      const { pdfToText } = await import('../../lib/pdftext');
+      const { text, pages } = await pdfToText(f.file, (i, n) => setProg(`Leyendo página ${i} de ${n}…`));
+      if (text.replace(/--- Página \d+/g, '').trim().length < 40) throw new Error('El PDF no tiene texto que se pueda leer (¿es solo imagen?). Expórtalo desde Canva como PDF con texto.');
+      let up = null;
+      if (f.file.size <= MAX_PDF_BYTES) { setProg('Guardando PDF…'); up = await uploadFile(f.file, { kind: 'template' }); }
+      await addDoc(collection(db, 'templates'), { type, title: f.title.trim(), purpose: f.purpose.trim(), goal: f.goal, notes: f.notes.trim(), text: text.slice(0, 700000), pages, fileId: up?.id || null, fileName: f.file.name, size: f.file.size, createdAt: serverTimestamp() });
       setAdding(false); setF({ title: '', purpose: '', goal: '', notes: '', file: null });
       toast('Plantilla guardada. La IA ya puede usarla.', 'ok');
-    } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+    } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); setProg(''); }
   };
 
   const remove = async (t) => {
     if (!window.confirm(`¿Eliminar la plantilla “${t.title}”?`)) return;
     await deleteDoc(doc(db, 'templates', t.id));
-    deleteFile(t.fileId).catch(() => {});
+    if (t.fileId) deleteFile(t.fileId).catch(() => {});
   };
 
   const shown = list.filter((t) => t.type === type);
@@ -52,9 +57,9 @@ export default function AdminTemplates() {
               <h4 style={{ margin: 0 }}>{t.title}</h4>
               <p className="small" style={{ margin: 0 }}>{t.purpose}</p>
               {t.notes && <p className="tiny muted" style={{ margin: 0 }}>{t.notes}</p>}
-              <div className="tiny muted">{t.fileName} · {Math.round((t.size || 0) / 1024)} KB · {fmtDate(t.createdAt)}</div>
+              <div className="tiny muted">{t.fileName} · {t.pages ? `${t.pages} págs. · ` : ''}{(t.size / 1048576).toFixed(1)} MB · {fmtDate(t.createdAt)}</div>
               <div className="row">
-                <button className="btn light xs" onClick={() => openFile(t.fileId).catch((e) => toast(e.message, 'err'))}><Icon name="eye" size={14} /> Ver</button>
+                {t.fileId && <button className="btn light xs" onClick={() => openFile(t.fileId).catch((e) => toast(e.message, 'err'))}><Icon name="eye" size={14} /> Ver</button>}
                 <button className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => remove(t)}><Icon name="trash" size={14} /> Eliminar</button>
               </div>
             </div>
@@ -63,7 +68,7 @@ export default function AdminTemplates() {
       )}
       {adding && (
         <Modal title={`Nueva plantilla de ${type === 'diet' ? 'dieta' : 'rutina'}`} onClose={() => !busy && setAdding(false)}
-          footer={<><button className="btn ghost" disabled={busy} onClick={() => setAdding(false)}>Cancelar</button><button className="btn sage" disabled={busy} onClick={save}>{busy ? 'Subiendo…' : 'Guardar'}</button></>}>
+          footer={<><button className="btn ghost" disabled={busy} onClick={() => setAdding(false)}>Cancelar</button><button className="btn sage" disabled={busy} onClick={save}>{busy ? (prog || 'Procesando…') : 'Guardar'}</button></>}>
           <div className="stack">
             <div className="tabs">
               <button className={cx('tab', type === 'diet' && 'on')} onClick={() => setType('diet')}>Dieta</button>

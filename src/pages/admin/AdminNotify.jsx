@@ -49,7 +49,7 @@ export default function AdminNotify() {
             <div className="stack" style={{ gap: 6, maxHeight: 260, overflow: 'auto' }}>
               {members.map((m) => (
                 <label key={m.id} className="row nowrap" style={{ cursor: 'pointer', padding: 6 }}>
-                  <input type="checkbox" checked={sel.includes(m.id)} onChange={(e) => setSel((s) => (e.target.checked ? [...s, m.id] : s.filter((x) => x !== m.id)))} style={{ width: 18, height: 18, accentColor: '#5e6f4f' }} />
+                  <input type="checkbox" checked={sel.includes(m.id)} onChange={(e) => setSel((s) => (e.target.checked ? [...s, m.id] : s.filter((x) => x !== m.id)))} style={{ width: 18, height: 18, accentColor: '#6e2236' }} />
                   <Avatar person={m} /><span className="grow small">{fullName(m)}</span><Badge plain>{m.id}</Badge>
                 </label>
               ))}

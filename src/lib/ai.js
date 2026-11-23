@@ -1,153 +1,144 @@
-// Generación de dietas y rutinas con Claude (API de Anthropic) usando las plantillas PDF de Keila.
+// Generación de dietas y rutinas con Claude (API de Anthropic), con el formato y estilo de los planes de Keila.
 // La llave de API se guarda en Firestore (settings/admin), visible solo para la administradora.
 import Anthropic from '@anthropic-ai/sdk';
 import { readFileBase64 } from './files';
-import { ACTIVITY, GOALS, ageFrom, bmi, bmiLabel } from './utils';
+import { ACTIVITY, DEFAULT_MODEL, GOALS, ageFrom, bmi, bmiLabel } from './utils';
 import { energy } from './nutrition';
 import { EXERCISES } from '../data/exercises';
+import { FOOD_PHOTOS, MEAL_SLOTS, SUPPLEMENTS, TIP_IMAGES, BLOCK_KINDS } from '../data/planAssets';
+import { BODY_FIELDS, clinicalText } from '../data/clinical';
+import { DIET_EXAMPLE, ROUTINE_EXAMPLE } from '../data/styleExamples';
 
-export { DEFAULT_MODEL } from './utils';
-import { DEFAULT_MODEL } from './utils';
+export { DEFAULT_MODEL };
 
 const str = { type: 'string' };
 const num = { type: 'number' };
 const obj = (properties) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
 const arr = (items) => ({ type: 'array', items });
+const oneOf = (values) => ({ type: 'string', enum: values });
 
 const DIET_SCHEMA = obj({
   title: str, goal: str, calories: num,
   macros: obj({ protein: num, carbs: num, fat: num }),
   waterLiters: num,
-  meals: arr(obj({ name: str, time: str, items: arr(obj({ food: str, qty: str })), notes: str })),
+  dailyTip: obj({ text: str, image: oneOf(['', ...TIP_IMAGES.map((t) => t.key)]) }),
+  supplements: arr(obj({ key: oneOf(SUPPLEMENTS.map((s) => s.key)), name: str, when: str, dose: str })),
+  days: arr(obj({
+    day: str,
+    tip: obj({ text: str, image: oneOf(['', ...TIP_IMAGES.map((t) => t.key)]) }),
+    meals: arr(obj({ slot: oneOf(MEAL_SLOTS), title: str, photo: oneOf(['', ...FOOD_PHOTOS.map((p) => p.key)]), sections: arr(obj({ label: str, items: arr(str) })) })),
+  })),
   recommendations: arr(str), avoid: arr(str), notes: str, rationale: str,
 });
 
 const ROUTINE_SCHEMA = obj({
-  title: str, goal: str, daysPerWeek: num, level: str, warmup: str, cooldown: str,
+  title: str, goal: str, level: str, daysPerWeek: num, schedule: str, notes: str, rationale: str,
   days: arr(obj({
-    name: str, focus: str, cardio: str,
-    exercises: arr(obj({ exerciseId: { type: 'string', enum: [...EXERCISES.map((e) => e.id), 'custom'] }, name: str, sets: num, reps: str, rest: str, notes: str })),
+    name: str, warmup: str, cardio: str,
+    blocks: arr(obj({ kind: oneOf(BLOCK_KINDS), sets: num, exercises: arr(obj({ exerciseId: oneOf([...EXERCISES.map((e) => e.id), 'custom']), name: str, detail: str })) })),
   })),
-  notes: str, rationale: str,
 });
 
-export function profileSummary(p, progress = []) {
+const yn = (flag, detail) => (flag === 'si' ? `Sí: ${detail || 'sin detalle'}` : flag === 'no' ? 'No' : detail || 'no indicado');
+
+export function profileSummary(p, { progress = [], clinical = null } = {}) {
   const e = energy(p);
   const age = ageFrom(p.birthDate);
   const b = bmi(p.weightKg, p.heightCm);
   const lines = [
-    `Nombre: ${p.firstName || ''} ${p.lastName || ''}`,
+    `Nombre: ${p.firstName || ''} (no uses el nombre completo en el plan)`,
     `Sexo: ${p.sex || 'no indicado'} · Edad: ${age ?? 'no indicada'} años`,
     `Estatura: ${p.heightCm || '?'} cm · Peso: ${p.weightKg || '?'} kg · IMC: ${b ?? '?'} (${bmiLabel(b)})`,
     p.goalWeight && `Peso meta: ${p.goalWeight} kg`,
-    p.waistCm && `Cintura: ${p.waistCm} cm`,
-    p.bodyType && `Complexión / somatotipo: ${p.bodyType}`,
-    `Objetivo: ${GOALS[p.goal] || p.goal || 'no indicado'}`,
-    `Actividad física diaria: ${ACTIVITY[p.activityLevel]?.label || p.activityLevel || 'no indicada'}`,
-    p.occupation && `Ocupación: ${p.occupation}`,
-    `Experiencia entrenando: ${p.trainingExperience || 'no indicada'} · Días de entrenamiento/semana: ${p.trainingDays || '?'}`,
-    `Horario de entrenamiento: ${p.trainingSchedule || 'no indicado'} · Lugar: ${p.trainingPlace || 'no indicado'}`,
-    `Comidas que tolera al día: ${p.mealsPerDay || '?'}`,
-    `Horario habitual: despierta ${p.wakeTime || '?'} · duerme ${p.sleepTime || '?'} · horas de sueño ${p.sleepHours || '?'}`,
-    `Enfermedades / diagnósticos: ${p.diseases || 'ninguna referida'}`,
-    `Medicamentos / suplementos: ${p.medications || 'ninguno'}`,
-    p.surgeries && `Cirugías / lesiones: ${p.surgeries}`,
-    p.injuries && `Lesiones o limitaciones físicas: ${p.injuries}`,
-    p.familyHistory && `Antecedentes familiares: ${p.familyHistory}`,
-    p.digestive && `Síntomas digestivos: ${p.digestive}`,
-    p.femaleHealth && `Salud femenina (ciclo, embarazo, lactancia): ${p.femaleHealth}`,
-    `Alergias alimentarias: ${p.allergies || 'ninguna'}`,
-    p.intolerances && `Intolerancias: ${p.intolerances}`,
-    p.foodDislikes && `Alimentos que no le gustan: ${p.foodDislikes}`,
-    p.foodPreferences && `Preferencias / tipo de dieta: ${p.foodPreferences}`,
-    p.budget && `Presupuesto para alimentos: ${p.budget}`,
-    p.cooking && `Quién cocina / tiempo para cocinar: ${p.cooking}`,
-    `Agua al día: ${p.waterLiters || '?'} L · Alcohol: ${p.alcohol || '?'} · Tabaco: ${p.smoking || '?'} · Estrés: ${p.stress || '?'}`,
-    p.notes && `Notas del paciente: ${p.notes}`,
+    `Objetivo: ${GOALS[p.goal] || p.goal || 'no indicado'}${p.goalOther ? ` (${p.goalOther})` : ''}`,
+    p.reason && `Motivo de consulta: ${p.reason}`,
+    p.prevNutritionist && `¿Ha ido antes con nutriólogo?: ${p.prevNutritionist === 'si' ? 'Sí' : 'No'}`,
+    `Actividad física diaria: ${ACTIVITY[p.activityLevel]?.label || 'no indicada'}`,
+    `Enfermedades: ${yn(p.hasDisease, p.diseases)} · Medicamentos: ${yn(p.takesMeds, p.medications)}`,
+    `Alergias/intolerancias: ${yn(p.hasAllergy, p.allergies)} · Lesiones/condiciones: ${yn(p.hasInjury, p.injuries)}`,
+    p.mealsPerDay && `Comidas al día que mejor se adaptan: ${p.mealsPerDay}`,
+    p.trainingDays && `Días de entrenamiento por semana: ${p.trainingDays} · Experiencia: ${p.trainingExperience || '?'}`,
     e && `Referencia calculada (Mifflin-St Jeor): TMB ${e.bmr} kcal, GET ${e.tdee} kcal, sugerido ${e.kcal} kcal (P ${e.protein} g, C ${e.carbs} g, G ${e.fat} g), agua ${e.water} L`,
   ].filter(Boolean);
-  if (progress.length) {
-    lines.push('Progreso reciente: ' + progress.slice(0, 6).map((x) => `${x.date}: ${x.weightKg ?? '?'} kg${x.waistCm ? `, cintura ${x.waistCm}` : ''}`).join(' | '));
+  if (clinical?.body) {
+    const m = BODY_FIELDS.filter((f) => clinical.body[f.key] != null).map((f) => `${f.label} ${clinical.body[f.key]}${f.unit ? ' ' + f.unit : ''}`);
+    if (m.length) lines.push(`Báscula y medidas (${clinical.body.date || 'última consulta'}): ${m.join(', ')}`);
   }
+  if (progress.length) {
+    lines.push('Progreso reciente: ' + progress.slice(0, 6).map((x) => `${x.date}: ${x.weightKg ?? '?'} kg${x.bodyFat ? `, grasa ${x.bodyFat}%` : ''}${x.waistCm ? `, cintura ${x.waistCm} cm` : ''}`).join(' | '));
+  }
+  const ct = clinicalText(clinical);
+  if (ct) lines.push('\nHISTORIAL CLÍNICO NUTRICIONAL (capturado por la nutrióloga):\n' + ct);
   return lines.join('\n');
 }
 
-const SYSTEM = `Eres el asistente clínico de la Lic. en Nutrición Keila Guerrero (México). Elaboras BORRADORES de planes que ella revisará antes de entregarlos.
+const SYSTEM = `Eres el asistente clínico de la Lic. en Nutrición Keila Guerrero (México). Elaboras BORRADORES de planes que ella revisará y firmará.
 Reglas:
-- Respeta estrictamente alergias, intolerancias, enfermedades y medicamentos. Si algo requiere supervisión médica, indícalo en "notes".
-- Usa alimentos accesibles en México, porciones caseras claras (tazas, piezas, gramos) y lenguaje cercano en español.
-- Imita el estilo, estructura, porciones y criterios de las plantillas PDF de Keila cuando se adjunten; elige la que mejor encaje con el objetivo y adáptala a la persona.
-- El número de comidas debe coincidir con las que la persona tolera al día. Ajusta horarios a su rutina y horario de entrenamiento.
-- En rutinas usa los ejercicios del catálogo (exerciseId); usa "custom" solo si es indispensable. Considera lesiones, nivel y lugar de entrenamiento.
-- En "rationale" explica en 3–5 líneas, para Keila, por qué elegiste ese enfoque.`;
+- Respeta estrictamente alergias, intolerancias, diagnósticos, medicamentos, embarazo/lactancia, lesiones y trastornos de la conducta alimentaria. Si algo requiere supervisión médica, indícalo en "notes".
+- Usa EXACTAMENTE el estilo de los planes de Keila: mismo tipo de platillos mexicanos caseros, porciones en piezas/tazas/cucharadas/gramos ("2pzas de huevo", "120gr de pechuga", "1/4tza", "1cdita"), secciones "Utilizar", "Elige solo una opción para acompañar" (Opción 1/Opción 2), "Toppings", "Acompañar con", nombres de platillo en MAYÚSCULAS, y tips del día (bebidas como agua de jamaica, café permitido, kéfir).
+- Dieta: 5 días (LUNES a VIERNES); en fin de semana se repite el día favorito. Cada día lleva ALMUERZO, COMIDA y CENA, más snacks ("SNACK OPCIONAL", "SNACK MEDIA TARDE") según las comidas que tolera la persona. Varía los platillos entre días. Elige "photo" del catálogo que más se parezca al platillo (o "" si ninguno). Ajusta porciones a las calorías y macros objetivo.
+- Suplementos: sugiere solo los del catálogo y solo si están indicados para la persona (sin contraindicaciones con sus medicamentos o condiciones).
+- Rutina: días nombrados por grupo muscular (ej. "CUADRÍCEPS", "PULL / BÍCEPS", "GLÚTEO", "PUSH / TRÍCEPS", "FEMORAL"); bloques "EJERCICIO SENCILLO", "BI SERIE" o "TRI SERIE" con número de series; cada ejercicio con indicaciones al estilo de Keila (serie de aproximación, rango de repeticiones, cadencia). Usa exerciseId del catálogo; "custom" solo si es indispensable. Respeta lesiones y ejercicios que prefiere evitar.
+- En "rationale" explica a Keila en 3–5 líneas por qué elegiste ese enfoque.`;
 
-function buildContent(kind, profile, progress, templates, instructions) {
+function buildContent(kind, profile, ctx, templates, instructions) {
   const content = [];
   for (const t of templates) {
-    if (!t.base64) continue;
-    content.push({
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: t.base64 },
-      title: t.title,
-      context: `Plantilla de ${kind === 'diet' ? 'dieta' : 'rutina'} de Keila. Para qué es: ${t.purpose || 'no especificado'}. ${t.notes || ''}`,
-    });
+    if (t.base64) {
+      content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: t.base64 }, title: t.title, context: `Plantilla de Keila. Para qué es: ${t.purpose || 'no especificado'}. ${t.notes || ''}` });
+    } else if (t.text) {
+      content.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: t.text.slice(0, 120000) }, title: t.title, context: `Plantilla de Keila. Para qué es: ${t.purpose || 'no especificado'}. ${t.notes || ''}` });
+    }
   }
+  content.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: kind === 'diet' ? DIET_EXAMPLE : ROUTINE_EXAMPLE }, title: 'Ejemplo de estilo de Keila', context: 'Texto de planes reales de Keila (anonimizados). Imita su formato, redacción y porciones.' });
   const catalog = kind === 'routine'
-    ? '\n\nCatálogo de ejercicios disponibles (exerciseId → nombre, grupo):\n' + EXERCISES.map((e) => `${e.id} → ${e.name} (${e.group})`).join('\n')
-    : '';
+    ? '\n\nCatálogo de ejercicios (exerciseId → nombre, grupo):\n' + EXERCISES.map((e) => `${e.id} → ${e.name} (${e.group})`).join('\n')
+    : '\n\nCatálogo de fotos de platillos (photo → descripción):\n' + FOOD_PHOTOS.map((f) => `${f.key} → ${f.label}`).join('\n') + '\n\nSuplementos disponibles (key → nombre, dosis típica):\n' + SUPPLEMENTS.map((s) => `${s.key} → ${s.name}, ${s.dose}`).join('\n') + '\n\nImágenes de tip (image): ' + TIP_IMAGES.map((t) => `${t.key} (${t.label})`).join(', ');
   content.push({
     type: 'text',
-    text: `Elabora un borrador de ${kind === 'diet' ? 'PLAN DE ALIMENTACIÓN' : 'RUTINA DE ENTRENAMIENTO'} para esta persona.\n\nExpediente:\n${profileSummary(profile, progress)}\n\nIndicaciones de Keila: ${instructions || 'ninguna adicional'}${catalog}`,
+    text: `Elabora un borrador de ${kind === 'diet' ? 'PLAN DE ALIMENTACIÓN' : 'PLAN DE ENTRENAMIENTO'} para esta persona.\n\nExpediente:\n${profileSummary(profile, ctx)}\n\nIndicaciones de Keila: ${instructions || 'ninguna adicional'}${catalog}`,
   });
   return content;
 }
 
-export async function generateWithAI({ kind, profile, progress = [], templates = [], instructions = '', apiKey, model, onStatus }) {
+export async function generateWithAI({ kind, profile, progress = [], clinical = null, templates = [], instructions = '', apiKey, model, onStatus }) {
   if (!apiKey) throw new Error('Configura tu llave de API de Claude en Ajustes para usar la IA.');
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   onStatus?.('Leyendo plantillas…');
   const loaded = [];
   for (const t of templates) {
-    try {
-      const { base64 } = await readFileBase64(t.fileId);
-      loaded.push({ ...t, base64 });
-    } catch (e) {
-      console.warn('No se pudo leer plantilla', t.title, e);
-    }
+    if (t.text) { loaded.push(t); continue; }
+    if (!t.fileId) continue;
+    try { const { base64 } = await readFileBase64(t.fileId); loaded.push({ ...t, base64 }); } catch (e) { console.warn('No se pudo leer plantilla', t.title, e); }
   }
   const params = {
     model: model || DEFAULT_MODEL,
-    max_tokens: 32000,
+    max_tokens: 48000,
     system: SYSTEM,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: kind === 'diet' ? DIET_SCHEMA : ROUTINE_SCHEMA } },
-    messages: [{ role: 'user', content: buildContent(kind, profile, progress, loaded, instructions) }],
+    messages: [{ role: 'user', content: buildContent(kind, profile, { progress, clinical }, loaded, instructions) }],
   };
-  onStatus?.('La IA está elaborando el borrador…');
+  onStatus?.('La IA está elaborando el borrador… (puede tardar 1–3 minutos)');
   let msg;
   try {
     msg = await client.beta.messages.stream({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }).finalMessage();
   } catch (e) {
-    // Si la cuenta no admite el parámetro de respaldo, reintentamos sin él
-    if (e instanceof Anthropic.BadRequestError && /fallback/i.test(e.message)) {
-      msg = await client.messages.stream(params).finalMessage();
-    } else if (e instanceof Anthropic.AuthenticationError) {
-      throw new Error('La llave de API no es válida. Revísala en Ajustes.');
-    } else if (e instanceof Anthropic.RateLimitError) {
-      throw new Error('Se alcanzó el límite de uso de la API. Intenta en unos minutos.');
-    } else if (e instanceof Anthropic.APIConnectionError) {
-      throw new Error('No hay conexión con el servicio de IA. Revisa tu internet.');
-    } else throw e;
+    if (e instanceof Anthropic.BadRequestError && /fallback/i.test(e.message)) msg = await client.messages.stream(params).finalMessage();
+    else if (e instanceof Anthropic.AuthenticationError) throw new Error('La llave de API no es válida. Revísala en Ajustes.');
+    else if (e instanceof Anthropic.PermissionDeniedError) throw new Error('La llave de API no tiene permiso para este modelo. Revisa el modelo en Ajustes.');
+    else if (e instanceof Anthropic.RateLimitError) throw new Error('Se alcanzó el límite de uso de la API. Intenta en unos minutos.');
+    else if (e instanceof Anthropic.APIConnectionError) throw new Error('No hay conexión con el servicio de IA. Revisa tu internet.');
+    else if (e instanceof Anthropic.BadRequestError) throw new Error('La solicitud a la IA no fue válida: ' + e.message);
+    else throw e;
   }
   if (msg.stop_reason === 'refusal') throw new Error('La IA no pudo generar este plan. Ajusta las indicaciones e inténtalo de nuevo.');
   if (msg.stop_reason === 'max_tokens') throw new Error('La respuesta fue demasiado larga. Pide un plan más breve.');
   const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  try {
-    const data = JSON.parse(text);
-    if (kind === 'routine') {
-      for (const d of data.days || []) for (const x of d.exercises || []) if (x.exerciseId === 'custom') x.exerciseId = '';
-    }
-    return data;
-  } catch {
-    throw new Error('La IA devolvió un formato inesperado. Inténtalo de nuevo.');
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error('La IA devolvió un formato inesperado. Inténtalo de nuevo.'); }
+  data.version = 2;
+  if (kind === 'routine') {
+    for (const d of data.days || []) for (const b of d.blocks || []) for (const x of b.exercises || []) if (x.exerciseId === 'custom') x.exerciseId = '';
   }
+  return data;
 }

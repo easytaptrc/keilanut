@@ -15,6 +15,7 @@ import TeamProgress from './TeamProgress';
 import TeamProfile from './TeamProfile';
 import TeamBook from './TeamBook';
 import TeamNotifications from './TeamNotifications';
+import TeamFood from './TeamFood';
 
 export async function googleSignIn() {
   // En la app instalada (y en iOS) los popups fallan: usamos redirect.
@@ -115,10 +116,11 @@ function TeamLogin() {
 const NAV = [
   ['', 'home', 'Inicio'],
   ['dieta', 'apple', 'Dieta'],
+  ['comidas', 'fork', 'Comidas'],
   ['rutina', 'dumbbell', 'Rutina'],
   ['progreso', 'chart', 'Progreso'],
-  ['perfil', 'user', 'Perfil'],
 ];
+const SIDE_EXTRA = [['perfil', 'user', 'Mi perfil']];
 
 function TeamShell() {
   const { member, logout } = useSession();
@@ -152,6 +154,7 @@ function TeamShell() {
         {NAV.map(([to, ic, l]) => (
           <NavLink key={to} to={`/team${to ? '/' + to : ''}`} end={!to} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name={ic} />{l}</NavLink>
         ))}
+        {SIDE_EXTRA.map(([to, ic, l]) => <NavLink key={to} to={`/team/${to}`} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name={ic} />{l}</NavLink>)}
         <NavLink to="/team/reservar" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name="calendar" />Reservar cita</NavLink>
         <NavLink to="/team/avisos" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name="bell" />Avisos {unread > 0 && <span className="count">{unread}</span>}</NavLink>
         <div className="side-foot">
@@ -177,6 +180,7 @@ function TeamShell() {
             <Route path="rutina" element={<TeamRoutine />} />
             <Route path="progreso" element={<TeamProgress />} />
             <Route path="perfil" element={<TeamProfile />} />
+            <Route path="comidas" element={<TeamFood />} />
             <Route path="reservar" element={<TeamBook />} />
             <Route path="avisos" element={<TeamNotifications list={notifs} />} />
             <Route path="*" element={<Navigate to="/team" replace />} />

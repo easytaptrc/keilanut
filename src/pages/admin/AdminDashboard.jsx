@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { orderBy } from 'firebase/firestore';
 import { useSession } from '../../lib/session';
+import { mergeBookingAdmin } from '../../lib/admin';
 import { useCol, useDoc } from '../../lib/hooks';
 import { Badge, Empty, Icon } from '../../components/ui';
 import PushCard from '../../components/PushCard';
@@ -8,7 +9,10 @@ import { BOOKING_STATUS, SERVICES, fmtDate, fullName, money, todayISO } from '..
 
 export default function AdminDashboard() {
   const { user } = useSession();
-  const { list: bookings, loading } = useCol('bookings', () => [orderBy('date', 'desc')], 'all-bookings');
+  const rawB = useCol('bookings', () => [orderBy('date', 'desc')], 'all-bookings');
+  const priv = useCol('bookingAdmin', null, 'booking-admin-private').list;
+  const loading = rawB.loading;
+  const bookings = mergeBookingAdmin(rawB.list, priv);
   const members = useCol('members', null, 'members').list;
   const settings = useDoc('settings/admin').data;
   const today = todayISO();
@@ -17,6 +21,10 @@ export default function AdminDashboard() {
   const priceOf = (b) => Number(b.price ?? prices[b.service] ?? 0);
 
   const pending = bookings.filter((b) => b.status === 'pendiente');
+  const in7 = new Date(); in7.setDate(in7.getDate() + 7);
+  const lim = in7.toISOString().slice(0, 10);
+  const hasUpcoming = (id) => bookings.some((b) => b.memberId === id && b.date >= today && ['pendiente', 'aceptada'].includes(b.status));
+  const reviews = members.filter((m) => m.active !== false && m.nextReview && m.nextReview <= lim && !hasUpcoming(m.id)).sort((a, b) => a.nextReview.localeCompare(b.nextReview)).slice(0, 10);
   const upcoming = bookings.filter((b) => b.date >= today && b.status === 'aceptada').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const todayList = upcoming.filter((b) => b.date === today);
   const monthDone = bookings.filter((b) => b.date.startsWith(month) && ['aceptada', 'completada'].includes(b.status));
@@ -45,6 +53,20 @@ export default function AdminDashboard() {
           <div className="tiny muted mt">Cobrado: {money(paid)} · Solo tú ves esto</div>
         </div>
       </div>
+
+      {reviews.length > 0 && (
+        <div className="card">
+          <div className="card-title"><h4>Revisiones de 3 semanas</h4><span className="tiny muted">A los pacientes les llega un aviso 3 días antes</span></div>
+          <div className="list">
+            {reviews.map((m) => (
+              <Link key={m.id} to={`/admin/team/${m.id}`} className="list-item" style={{ textDecoration: "none" }}>
+                <div className="grow"><b className="small">{fullName(m)}</b><div className="tiny muted">{m.id} · última consulta {fmtDate(m.lastVisit)}</div></div>
+                <Badge tone={m.nextReview < today ? "danger" : m.nextReview === today ? "warn" : "info"}>{m.nextReview < today ? "Atrasada" : m.nextReview === today ? "Hoy" : fmtDate(m.nextReview, { day: "numeric", month: "short" })}</Badge>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid g2">
         <div className="card">

@@ -4,11 +4,10 @@ import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { useDoc } from '../../lib/hooks';
 import { Field, Icon, useToast } from '../../components/ui';
-import { DEFAULT_SCHEDULE } from '../../components/BookingForm';
-import { SERVICES, cx, money } from '../../lib/utils';
-import { DEFAULT_MODEL } from '../../lib/utils';
+import { DAY_NAMES, SCHEDULE_VERSION, normalizeSchedule } from '../../lib/schedule';
+import { DEFAULT_MODEL, SERVICES, cx, fmtDate, money, todayISO } from '../../lib/utils';
 
-const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DAYS = DAY_NAMES;
 
 export default function AdminSettings() {
   const toast = useToast();
@@ -18,14 +17,18 @@ export default function AdminSettings() {
   const [a, setA] = useState(null);
   const [pw, setPw] = useState({ cur: '', next: '' });
   const [showKey, setShowKey] = useState(false);
+  const [blockDay, setBlockDay] = useState('');
 
-  useEffect(() => { if (!p && !pub.loading) setP({ schedule: DEFAULT_SCHEDULE, whatsapp: '', instagram: '', address: '', ...(pub.data || {}) }); }, [pub.loading]); // eslint-disable-line
+  useEffect(() => { if (!p && !pub.loading) setP({ whatsapp: '', instagram: '', address: '', ...(pub.data || {}), schedule: normalizeSchedule(pub.data?.schedule) }); }, [pub.loading]); // eslint-disable-line
   useEffect(() => { if (!a && !adm.loading) setA({ prices: { online: 500, presencial: 500 }, anthropicKey: '', model: DEFAULT_MODEL, ...(adm.data || {}) }); }, [adm.loading]); // eslint-disable-line
   if (!p || !a) return <div className="skeleton" style={{ height: 300 }} />;
 
   const savePub = async () => {
     const { id, ...rest } = p; // eslint-disable-line no-unused-vars
-    try { await setDoc(doc(db, 'settings', 'public'), rest, { merge: true }); toast('Guardado', 'ok'); } catch (e) { toast(e.message, 'err'); }
+    const bad = Object.values(rest.schedule.week).some((d) => d.on && d.shifts.some((x) => x.start >= x.end));
+    if (bad) return toast('Revisa los turnos: la hora de inicio debe ser antes que la de fin.', 'err');
+    rest.schedule = { ...rest.schedule, version: SCHEDULE_VERSION };
+    try { await setDoc(doc(db, 'settings', 'public'), rest); toast('Guardado', 'ok'); } catch (e) { toast(e.message, 'err'); }
   };
   const saveAdm = async () => {
     const { id, ...rest } = a; // eslint-disable-line no-unused-vars
@@ -75,18 +78,50 @@ export default function AdminSettings() {
 
         <div className="card stack">
           <h4 style={{ margin: 0 }}>Horario de citas</h4>
-          <Field label="Días de atención">
-            <div className="checks">
-              {DAYS.map((d, i) => (
-                <button key={d} type="button" className={cx('opt', sch.days.includes(i) && 'on')} onClick={() => setSch({ days: sch.days.includes(i) ? sch.days.filter((x) => x !== i) : [...sch.days, i].sort() })}>{d}</button>
-              ))}
+          <p className="small muted" style={{ margin: 0 }}>Activa los días que trabajas y sus turnos (por ejemplo, mañana de 7:00 a 9:00 y tarde de 17:30 a 19:30). Las citas son por hora. El calendario de reservaciones solo mostrará esos días y horas; cada hora reservada desaparece para los demás.</p>
+          <div className="stack" style={{ gap: 10 }}>
+            {[1, 2, 3, 4, 5, 6, 0].map((i) => {
+              const d = sch.week[i];
+              const upd = (patch) => setSch({ week: { ...sch.week, [i]: { ...d, ...patch } } });
+              const updShift = (k, patch) => upd({ shifts: d.shifts.map((x, j) => (j === k ? { ...x, ...patch } : x)) });
+              return (
+                <div key={i} className={cx("day-shifts", !d.on && "off")}>
+                  <button type="button" className={cx("opt", d.on && "on")} onClick={() => upd({ on: !d.on })}>{DAYS[i]}</button>
+                  {d.on && (
+                    <div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
+                      {d.shifts.map((sh, k) => (
+                        <div key={k} className="shift-row">
+                          <span className="tiny muted">{k === 0 ? "Turno 1" : "Turno " + (k + 1)}</span>
+                          <input className="input sm" type="time" value={sh.start} onChange={(e) => updShift(k, { start: e.target.value })} aria-label={DAYS[i] + " desde"} />
+                          <input className="input sm" type="time" value={sh.end} onChange={(e) => updShift(k, { end: e.target.value })} aria-label={DAYS[i] + " hasta"} />
+                          <button type="button" className="btn link xs" style={{ color: "var(--danger)" }} onClick={() => upd({ shifts: d.shifts.filter((_, j) => j !== k) })} aria-label="Quitar turno"><Icon name="x" size={16} /></button>
+                        </div>
+                      ))}
+                      {d.shifts.length < 3 && <button type="button" className="btn link xs" style={{ alignSelf: "flex-start" }} onClick={() => upd({ shifts: [...d.shifts, { start: "12:00", end: "14:00" }] })}>+ Agregar turno</button>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid g2">
+            <Field label="Duración de cada cita"><select className="select" value={sch.step} onChange={(e) => setSch({ step: Number(e.target.value) })}>{[30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>{m} min</option>)}</select></Field>
+            <Field label="Reservar con hasta"><select className="select" value={sch.maxDaysAhead} onChange={(e) => setSch({ maxDaysAhead: Number(e.target.value) })}>{[14, 30, 60, 90, 180].map((m) => <option key={m} value={m}>{m} días de anticipación</option>)}</select></Field>
+            <Field label="Anticipación mínima el mismo día"><select className="select" value={sch.minNoticeHours} onChange={(e) => setSch({ minNoticeHours: Number(e.target.value) })}>{[0, 1, 2, 3, 6, 12, 24].map((m) => <option key={m} value={m}>{m} h</option>)}</select></Field>
+          </div>
+          <Field label="Días sin atención (vacaciones, festivos)">
+            <div className="row nowrap">
+              <input className="input sm grow" type="date" min={todayISO()} value={blockDay} onChange={(e) => setBlockDay(e.target.value)} />
+              <button type="button" className="btn light sm" disabled={!blockDay} onClick={() => { if (!sch.blockedDates.includes(blockDay)) setSch({ blockedDates: [...sch.blockedDates, blockDay].sort() }); setBlockDay(''); }}>Bloquear</button>
             </div>
           </Field>
-          <div className="grid g3">
-            <Field label="Desde"><input className="input" type="time" value={sch.start} onChange={(e) => setSch({ start: e.target.value })} /></Field>
-            <Field label="Hasta"><input className="input" type="time" value={sch.end} onChange={(e) => setSch({ end: e.target.value })} /></Field>
-            <Field label="Duración (min)"><select className="select" value={sch.step} onChange={(e) => setSch({ step: Number(e.target.value) })}>{[30, 45, 60, 90].map((m) => <option key={m} value={m}>{m}</option>)}</select></Field>
-          </div>
+          {sch.blockedDates.filter((x) => x >= todayISO()).length > 0 && (
+            <div className="chip-list">
+              {sch.blockedDates.filter((x) => x >= todayISO()).map((x) => (
+                <button type="button" key={x} className="badge danger" onClick={() => setSch({ blockedDates: sch.blockedDates.filter((y) => y !== x) })} title="Quitar">{fmtDate(x)} ✕</button>
+              ))}
+            </div>
+          )}
           <h4 style={{ margin: '10px 0 0' }}>Contacto público</h4>
           <div className="grid g2">
             <Field label="WhatsApp (10 dígitos)"><input className="input" value={p.whatsapp} onChange={(e) => setP({ ...p, whatsapp: e.target.value })} /></Field>

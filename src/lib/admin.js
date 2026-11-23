@@ -1,7 +1,7 @@
 // Operaciones de la administradora: alta de miembros, accesos, notificaciones.
 import { getApps, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth, inMemoryPersistence, setPersistence, signOut } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, deleteField, doc, getDoc, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, firebaseConfig, memberEmailFromId, MEMBER_DOMAIN, USE_EMULATORS } from '../firebase';
 import { genPassword, todayISO } from './utils';
 import { normalizeBooking } from '../components/BookingForm';
@@ -44,7 +44,7 @@ export async function createMemberFromBooking(booking, priceDefault) {
   const password = genPassword(8);
   const loginEmail = memberEmailFromId(id);
   const uid = await createLogin(loginEmail, password);
-  const profile = normalizeBooking({ ...booking, diseasesList: [], diseasesOther: booking.diseases || '' });
+  const profile = normalizeBooking(booking);
   const b = writeBatch(db);
   b.set(doc(db, 'members', id), {
     ...profile,
@@ -54,18 +54,20 @@ export async function createMemberFromBooking(booking, priceDefault) {
     photo: null,
     fcmTokens: [],
     firstBookingId: booking.id,
+    lastVisit: booking.date || todayISO(),
+    nextReview: addDays(booking.date || todayISO(), 21),
     createdAt: serverTimestamp(),
   });
   b.set(doc(db, 'logins', id), { email: loginEmail });
   b.update(doc(db, 'bookings', booking.id), {
     status: 'aceptada', memberId: id, acceptedAt: serverTimestamp(),
-    price: booking.price ?? priceDefault ?? null,
   });
+  b.set(doc(db, 'bookingAdmin', booking.id), { price: booking.price ?? priceDefault ?? null, paid: !!booking.paid, adminNotes: booking.adminNotes || '', updatedAt: serverTimestamp() }, { merge: true });
   // Peso inicial como primer registro de progreso
   if (booking.weightKg) {
     b.set(doc(collection(db, 'members', id, 'progress')), {
       date: todayISO(), weightKg: Number(booking.weightKg) || null,
-      waistCm: Number(booking.waistCm) || null, hipCm: Number(booking.hipCm) || null, bodyFat: null, notes: 'Registro inicial', by: 'admin', createdAt: serverTimestamp(),
+      heightCm: Number(booking.heightCm) || null, notes: 'Registro inicial (reservación)', by: 'admin', createdAt: serverTimestamp(),
     });
   }
   b.set(doc(collection(db, 'members', id, 'notifications')), {
@@ -88,4 +90,29 @@ export async function resetMemberAccess(memberId) {
   b.update(doc(db, 'members', memberId), { authUid: uid });
   await b.commit();
   return { id: memberId, password };
+}
+
+export function addDays(iso, n) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/** Precio, pago y notas privadas viven en bookingAdmin/{id}: solo la administradora puede leerlos. */
+export async function saveBookingAdmin(booking, patch) {
+  await setDoc(doc(db, 'bookingAdmin', booking.id), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
+  // Limpia datos privados antiguos que estaban dentro de la reservación (visible para el paciente)
+  if (booking._legacyPrivate) {
+    await updateDoc(doc(db, 'bookings', booking.id), { price: deleteField(), paid: deleteField(), adminNotes: deleteField() }).catch(() => {});
+  }
+}
+
+/** Une las reservaciones con sus datos privados */
+export function mergeBookingAdmin(bookings, adminList) {
+  const map = Object.fromEntries(adminList.map((a) => [a.id, a]));
+  return bookings.map((b) => {
+    const a = map[b.id] || {};
+    const legacy = b.price != null || b.paid != null || b.adminNotes != null;
+    return { ...b, price: a.price ?? b.price ?? null, paid: a.paid ?? b.paid ?? false, adminNotes: a.adminNotes ?? b.adminNotes ?? '', _legacyPrivate: legacy };
+  });
 }

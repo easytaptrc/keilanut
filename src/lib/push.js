@@ -7,6 +7,11 @@ let swReg = null;
 
 export async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
+  // En desarrollo el caché del service worker serviría archivos viejos: lo quitamos
+  if (import.meta.env.DEV) {
+    (await navigator.serviceWorker.getRegistrations()).forEach((r) => r.unregister());
+    return null;
+  }
   try {
     swReg = await navigator.serviceWorker.register('/sw.js');
     return swReg;

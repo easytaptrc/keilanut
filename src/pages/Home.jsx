@@ -133,7 +133,7 @@ export default function Home() {
             <div className="eyebrow">Proceso</div>
             <h2>Así trabajamos juntas</h2>
           </div>
-          <div className="grid g4">
+          <div className="grid g4 steps">
             {[
               ['Reserva', 'Llena tu registro con tu historial clínico, hábitos y objetivo.'],
               ['Evaluación', 'Keila revisa tu caso y confirma tu cita online o presencial.'],

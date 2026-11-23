@@ -19,13 +19,24 @@ export const ACTIVITY = {
 };
 
 export const GOALS = {
-  perder_grasa: 'Perder grasa / bajar de peso',
-  ganar_musculo: 'Ganar masa muscular',
-  recomposicion: 'Recomposición corporal (tonificar)',
-  mantener: 'Mantener peso y comer saludable',
-  rendimiento: 'Rendimiento deportivo',
-  salud: 'Control de enfermedad / salud clínica',
-  embarazo: 'Embarazo o lactancia',
+  perder_grasa: "Bajar grasa",
+  ganar_musculo: "Ganar músculo",
+  recomposicion: "Recomposición corporal",
+  salud: "Mejorar salud",
+  rendimiento: "Rendimiento deportivo",
+  habitos: "Mejorar hábitos alimenticios",
+  mantener: "Mantener peso",
+  embarazo: "Embarazo o lactancia",
+  otro: "Otro",
+};
+
+/** Opciones que ve el paciente al reservar */
+export const BOOKING_GOALS = { perder_grasa: "Bajar grasa", ganar_musculo: "Ganar músculo", salud: "Mejorar salud", rendimiento: "Rendimiento deportivo", otro: "Otro" };
+
+/** Objetivo del historial clínico → clave interna */
+export const CLINICAL_GOAL_KEY = {
+  "Pérdida de grasa": "perder_grasa", "Ganancia de masa muscular": "ganar_musculo", "Recomposición corporal": "recomposicion",
+  "Mejora de la salud": "salud", "Rendimiento deportivo": "rendimiento", "Mejora de hábitos alimenticios": "habitos", Otro: "otro",
 };
 
 export function ageFrom(birth) {

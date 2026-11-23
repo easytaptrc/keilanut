@@ -11,7 +11,7 @@ const pub = path.join(root, 'static');
 fs.mkdirSync(path.join(pub, 'icons'), { recursive: true });
 
 const LOGO = path.join(root, 'IMG_0646.PNG');
-const CREAM = { r: 247, g: 244, b: 238, alpha: 1 };
+const CREAM = { r: 255, g: 251, b: 239, alpha: 1 };
 
 async function logos() {
   // Logo con fondo transparente (blanco -> alfa)

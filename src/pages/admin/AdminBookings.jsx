@@ -5,32 +5,27 @@ import { db } from '../../firebase';
 import { useCol, useDoc } from '../../lib/hooks';
 import { Badge, Empty, Field, Icon, Modal, useToast } from '../../components/ui';
 import { ACTIVITY, BOOKING_STATUS, GOALS, SERVICES, ageFrom, bmi, bmiLabel, cx, fmtDate, fmtDateTime, fullName, money, waLink } from '../../lib/utils';
-import { createMemberFromBooking, notifyMember } from '../../lib/admin';
+import { addDays, createMemberFromBooking, mergeBookingAdmin, notifyMember, saveBookingAdmin } from '../../lib/admin';
 
 export function ClinicalSheet({ p }) {
   const age = ageFrom(p.birthDate);
   const b = bmi(p.weightKg, p.heightCm);
+  const yn = (flag, v) => (flag === "si" ? `Sí — ${v || "sin detalle"}` : flag === "no" ? "No" : v);
   const groups = [
-    ['Datos personales', [
-      ['Nombre', fullName(p)], ['Nacimiento', p.birthDate ? `${fmtDate(p.birthDate)} · ${age} años` : ''], ['Sexo', p.sex], ['Teléfono', p.phone], ['Correo', p.email],
-      ['Ocupación', p.occupation], ['Ciudad', p.city],
+    ["Datos personales", [
+      ["Nombre", fullName(p)], ["Nacimiento", p.birthDate ? `${fmtDate(p.birthDate)} · ${age} años` : ""], ["Sexo", p.sex], ["Teléfono", p.phone], ["Correo", p.email],
     ]],
-    ['Medidas', [
-      ['Estatura', p.heightCm && `${p.heightCm} cm`], ['Peso', p.weightKg && `${p.weightKg} kg`], ['IMC', b && `${b} · ${bmiLabel(b)}`], ['Peso meta', p.goalWeight && `${p.goalWeight} kg`],
-      ['Cintura', p.waistCm && `${p.waistCm} cm`], ['Cadera', p.hipCm && `${p.hipCm} cm`], ['Complexión', p.bodyType],
+    ["Motivo y objetivo", [
+      ["Motivo de consulta", p.reason], ["Objetivo", (GOALS[p.goal] || p.goal) + (p.goalOther ? ` (${p.goalOther})` : "")],
+      ["¿Ha ido con nutriólogo?", p.prevNutritionist === "si" ? "Sí" : p.prevNutritionist === "no" ? "No" : ""],
     ]],
-    ['Historial médico', [
-      ['Enfermedades', p.diseases || 'Ninguna referida'], ['Medicamentos', p.medications], ['Cirugías', p.surgeries], ['Lesiones', p.injuries], ['Antecedentes familiares', p.familyHistory],
-      ['Digestivo', p.digestive], ['Salud femenina', p.femaleHealth], ['Laboratorios', p.labs],
+    ["Medidas", [
+      ["Estatura", p.heightCm && `${p.heightCm} cm`], ["Peso", p.weightKg && `${p.weightKg} kg`], ["IMC", b && `${b} · ${bmiLabel(b)}`], ["Peso meta", p.goalWeight && `${p.goalWeight} kg`],
+      ["Actividad", ACTIVITY[p.activityLevel]?.label],
     ]],
-    ['Alimentación y hábitos', [
-      ['Alergias', p.allergies || 'Ninguna'], ['Intolerancias', p.intolerances], ['No le gusta', p.foodDislikes], ['Tipo de alimentación', p.foodPreferences], ['Comidas al día', p.mealsPerDay],
-      ['Agua', p.waterLiters && `${p.waterLiters} L`], ['Sueño', p.sleepHours && `${p.sleepHours} h (${p.sleepTime || '?'} – ${p.wakeTime || '?'})`], ['Estrés', p.stress], ['Alcohol', p.alcohol], ['Tabaco', p.smoking],
-      ['Presupuesto', p.budget], ['Quién cocina', p.cooking],
-    ]],
-    ['Actividad y objetivo', [
-      ['Actividad diaria', ACTIVITY[p.activityLevel]?.label], ['Experiencia', p.trainingExperience], ['Días de entrenamiento', p.trainingDays], ['Horario', p.trainingSchedule], ['Lugar', p.trainingPlace],
-      ['Objetivo', GOALS[p.goal] || p.goal], ['Motivación', p.motivation], ['Notas', p.notes],
+    ["Salud básica", [
+      ["Enfermedad o diagnóstico", yn(p.hasDisease, p.diseases) || "No indicado"], ["Medicamentos", yn(p.takesMeds, p.medications)],
+      ["Alergias / intolerancias", yn(p.hasAllergy, p.allergies)], ["Lesiones o condiciones", yn(p.hasInjury, p.injuries)], ["Comentarios", p.notes],
     ]],
   ];
   return (
@@ -89,7 +84,9 @@ function BookingDetail({ b, prices, onClose }) {
   }, 'Reservación aceptada y acceso creado');
 
   const acceptExisting = (memberId) => run(async () => {
-    await updateDoc(doc(db, 'bookings', b.id), { status: 'aceptada', memberId, acceptedAt: serverTimestamp(), price: price === '' ? null : Number(price) });
+    await updateDoc(doc(db, 'bookings', b.id), { status: 'aceptada', memberId, acceptedAt: serverTimestamp() });
+    await saveBookingAdmin(b, { price: price === '' ? null : Number(price) });
+    await updateDoc(doc(db, 'members', memberId), { lastVisit: b.date, nextReview: addDays(b.date, 21), active: true });
     await notifyMember(memberId, { title: 'Cita confirmada', body: `Tu cita del ${fmtDate(b.date, { weekday: 'long', day: 'numeric', month: 'long' })} a las ${b.time} está confirmada.`, type: 'booking' });
     onClose();
   }, 'Reservación aceptada');
@@ -107,7 +104,7 @@ function BookingDetail({ b, prices, onClose }) {
     onClose();
   }, 'Cita marcada como completada');
 
-  const saveAdmin = (patch) => run(() => updateDoc(doc(db, 'bookings', b.id), patch), 'Guardado');
+  const saveAdmin = (patch) => run(() => saveBookingAdmin(b, patch), 'Guardado');
 
   return (
     <Modal wide title={cred ? 'Acceso al Team creado' : fullName(b)} onClose={onClose}
@@ -141,7 +138,7 @@ function BookingDetail({ b, prices, onClose }) {
           <div className="card soft grid g3" style={{ alignItems: 'end' }}>
             <Field label="Precio de la cita (solo tú lo ves)"><input className="input" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} onBlur={() => b.status !== 'pendiente' && saveAdmin({ price: price === '' ? null : Number(price) })} /></Field>
             <label className="row nowrap small" style={{ paddingBottom: 12 }}>
-              <input type="checkbox" checked={!!b.paid} onChange={(e) => saveAdmin({ paid: e.target.checked })} style={{ width: 20, height: 20, accentColor: '#5e6f4f' }} /> Pagado
+              <input type="checkbox" checked={!!b.paid} onChange={(e) => saveAdmin({ paid: e.target.checked })} style={{ width: 20, height: 20, accentColor: '#6e2236' }} /> Pagado
             </label>
             <div className="price">{money(price || 0)}</div>
             <Field label="Notas privadas" className="span2"><input className="input" value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} onBlur={() => adminNotes !== (b.adminNotes || '') && saveAdmin({ adminNotes })} /></Field>
@@ -160,7 +157,16 @@ export default function AdminBookings() {
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState('pendiente');
   const [q, setQ] = useState('');
-  const { list, loading } = useCol('bookings', () => [orderBy('createdAt', 'desc')], 'bookings-admin');
+  const raw = useCol('bookings', () => [orderBy('createdAt', 'desc')], 'bookings-admin');
+  const priv = useCol('bookingAdmin', null, 'booking-admin-private').list;
+  const loading = raw.loading;
+  const list = mergeBookingAdmin(raw.list, priv);
+  // Migración única: mueve precio/pago/notas antiguos a la colección privada
+  useEffect(() => {
+    const legacy = list.filter((b) => b._legacyPrivate);
+    if (!legacy.length) return;
+    Promise.all(legacy.map((b) => saveBookingAdmin(b, { price: b.price, paid: !!b.paid, adminNotes: b.adminNotes || '' }))).catch((e) => console.warn('Migración', e));
+  }, [raw.list.map((b) => b.id + (b.price ?? '') + (b.adminNotes ?? '')).join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const prices = useDoc('settings/admin').data?.prices || {};
   const openId = params.get('id');
   const open = list.find((b) => b.id === openId);

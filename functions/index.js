@@ -52,3 +52,38 @@ exports.pushNewBooking = onDocumentCreated('bookings/{bookingId}', async (event)
     url: `/admin/reservaciones?id=${event.params.bookingId}`,
   })));
 });
+
+// ---------- Recordatorio de revisión (cada 3 semanas) ----------
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const TZ = 'America/Monterrey';
+const isoToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const diffDays = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 86400000);
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const human = (iso) => { const [, m, d] = iso.split('-').map(Number); return `${d} de ${MESES[m - 1]}`; };
+
+exports.reviewReminders = onSchedule({ schedule: 'every day 09:00', timeZone: TZ, retryCount: 1 }, async () => {
+  const today = isoToday();
+  const snap = await db.collection('members').where('nextReview', '<=', addDays(today, 3)).get();
+  let sent = 0;
+  for (const m of snap.docs) {
+    const data = m.data();
+    if (data.active === false || !data.nextReview) continue;
+    const left = diffDays(today, data.nextReview);
+    if (left < -7) continue; // muy atrasado: ya no insistimos
+    const stage = left > 0 ? 'pre' : 'due';
+    const flag = stage === 'pre' ? 'reminderPreFor' : 'reminderDueFor';
+    if (data[flag] === data.nextReview) continue;
+    // Si ya tiene una cita próxima, no se envía el aviso
+    const bookings = await db.collection('bookings').where('memberId', '==', m.id).get();
+    if (bookings.docs.some((b) => b.data().date >= today && ['pendiente', 'aceptada'].includes(b.data().status))) continue;
+    const title = stage === 'pre' ? `Tu revisión es en ${left} día${left === 1 ? '' : 's'} 📅` : 'Te toca tu revisión 📅';
+    const body = stage === 'pre'
+      ? `Cada 3 semanas revisamos tu avance. Tu próxima revisión es el ${human(data.nextReview)}: agenda tu cita desde la app.`
+      : 'Ya se cumplieron 3 semanas desde tu última consulta. Reserva tu cita para revisar tu avance y ajustar tu plan.';
+    await m.ref.collection('notifications').add({ title, body, type: 'booking', read: false, createdAt: FieldValue.serverTimestamp() });
+    await m.ref.update({ [flag]: data.nextReview });
+    sent++;
+  }
+  console.log(`Recordatorios enviados: ${sent}`);
+});

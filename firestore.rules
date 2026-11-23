@@ -75,10 +75,17 @@ service cloud.firestore {
         && shortStr(request.resource.data.get('email', null), 160) && shortStr(request.resource.data.get('phone', null), 40)
         && shortStr(request.resource.data.get('notes', null), 4000) && shortStr(request.resource.data.get('motivation', null), 4000)
         && shortStr(request.resource.data.get('diseases', null), 4000)
+        && shortStr(request.resource.data.get('reason', null), 4000) && shortStr(request.resource.data.get('medications', null), 4000)
+        && shortStr(request.resource.data.get('allergies', null), 4000) && shortStr(request.resource.data.get('injuries', null), 4000)
         && (request.resource.data.get('memberId', null) == null || isMember(request.resource.data.memberId))
         && existsAfter(/databases/$(database)/documents/slots/$(request.resource.data.date + '_' + request.resource.data.time.replace(':', '')))
         && getAfter(/databases/$(database)/documents/slots/$(request.resource.data.date + '_' + request.resource.data.time.replace(':', ''))).data.bookingId == bookingId;
       allow update, delete: if isAdmin();
+    }
+
+    // Precio, pago y notas privadas de cada cita: solo la administradora
+    match /bookingAdmin/{bookingId} {
+      allow read, write: if isAdmin();
     }
 
     // ---------- Team ----------
@@ -114,6 +121,42 @@ service cloud.firestore {
           && request.resource.data.date is string && shortStr(request.resource.data.get('notes', null), 1000));
         allow update: if isAdmin();
         allow delete: if isAdmin() || (isMember(memberId) && resource.data.by == 'member');
+      }
+      // Historial clínico: uso exclusivo de la nutrióloga
+      match /clinical/{docId} {
+        allow read, write: if isAdmin();
+      }
+      // Fotos de progreso (miniatura + imagen completa)
+      match /photos/{pid} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow create: if isAdmin() || (isMember(memberId)
+          && request.resource.data.keys().hasOnly(["pose", "date", "by", "note", "thumb", "createdAt"])
+          && request.resource.data.by == "member"
+          && request.resource.data.pose in ["frente", "perfil", "espalda", "otra"]
+          && request.resource.data.date is string && request.resource.data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.thumb is string && request.resource.data.thumb.size() < 200000
+          && shortStr(request.resource.data.get("note", null), 300));
+        allow update: if isAdmin();
+        allow delete: if isAdmin() || (isMember(memberId) && resource.data.by == "member");
+      }
+      match /photoFull/{pid} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow create: if isAdmin() || (isMember(memberId)
+          && request.resource.data.keys().hasOnly(["data", "by"]) && request.resource.data.by == "member"
+          && request.resource.data.data is string && request.resource.data.data.size() < 1000000
+          && exists(/databases/$(database)/documents/members/$(memberId)/photos/$(pid)) == false
+          && existsAfter(/databases/$(database)/documents/members/$(memberId)/photos/$(pid)));
+        allow update: if isAdmin();
+        allow delete: if isAdmin() || (isMember(memberId) && resource.data.by == "member");
+      }
+      // Registro de comidas (tipo FatSecret)
+      match /foodlog/{day} {
+        allow read: if isAdmin() || isMember(memberId);
+        allow write: if isAdmin() || (isMember(memberId)
+          && day.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          && request.resource.data.keys().hasOnly(["date", "entries", "updatedAt"])
+          && request.resource.data.date == day
+          && request.resource.data.entries is list && request.resource.data.entries.size() <= 80);
       }
       match /notifications/{nid} {
         allow read: if isAdmin() || isMember(memberId);
