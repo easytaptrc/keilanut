@@ -5,11 +5,12 @@ import { useCol } from '../../lib/hooks';
 import { Badge, Empty, Field, Icon, Modal, useToast } from '../../components/ui';
 import { MAX_PDF_BYTES, deleteFile, openFile, uploadFile } from '../../lib/files';
 import { GOALS, cx, fmtDate } from '../../lib/utils';
+import { PlanLibraryBrowser } from '../../components/PlanLibrary';
 
 export default function AdminTemplates() {
   const toast = useToast();
   const { list } = useCol('templates', () => [orderBy('createdAt', 'desc')], 'templates');
-  const [type, setType] = useState('diet');
+  const [type, setType] = useState('library');
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ title: '', purpose: '', goal: '', notes: '', file: null });
   const [busy, setBusy] = useState(false);
@@ -40,14 +41,21 @@ export default function AdminTemplates() {
   const shown = list.filter((t) => t.type === type);
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <div className="topbar"><h1>Plantillas IA</h1><button className="btn sage sm" onClick={() => setAdding(true)}><Icon name="plus" size={16} /> Subir plantilla</button></div>
+      <div className="topbar"><h1>Planes y plantillas</h1><button className="btn sage sm" onClick={() => { if (type === 'library') setType('diet'); setAdding(true); }}><Icon name="plus" size={16} /> Subir plantilla PDF</button></div>
+      <div className="tabs">
+        <button className={cx('tab', type === 'library' && 'on')} onClick={() => setType('library')}>Planes base</button>
+        <button className={cx('tab', type === 'diet' && 'on')} onClick={() => setType('diet')}>Dietas PDF ({list.filter((t) => t.type === 'diet').length})</button>
+        <button className={cx('tab', type === 'routine' && 'on')} onClick={() => setType('routine')}>Rutinas PDF ({list.filter((t) => t.type === 'routine').length})</button>
+      </div>
+      {type === 'library' ? (
+        <>
+          <div className="notice">Tus planes de alimentación listos para usar. En el expediente de cada paciente (pestaña <b>Dieta</b> → <b>Mis planes base</b>) se ordenan según su perfil: eliges uno, lo ajustas y lo publicas. La IA también los usa como referencia de tu estilo y porciones.</div>
+          <PlanLibraryBrowser />
+        </>
+      ) : <>
       <div className="notice">
         Sube tus dietas y rutinas modelo en PDF y explica <b>para qué es cada una</b> (ej. “Déficit 1400 kcal para mujer con SOP”, “Hipertrofia 5 días intermedio”).
         Al generar un plan, la IA lee el expediente del paciente, elige y adapta tus plantillas a su peso, objetivo, estructura e historial clínico.
-      </div>
-      <div className="tabs">
-        <button className={cx('tab', type === 'diet' && 'on')} onClick={() => setType('diet')}>Dietas ({list.filter((t) => t.type === 'diet').length})</button>
-        <button className={cx('tab', type === 'routine' && 'on')} onClick={() => setType('routine')}>Rutinas ({list.filter((t) => t.type === 'routine').length})</button>
       </div>
       {!shown.length ? <Empty icon="📄" title="Sin plantillas">Sube tu primera {type === 'diet' ? 'dieta' : 'rutina'} en PDF.</Empty> : (
         <div className="grid g3 stagger">
@@ -66,6 +74,7 @@ export default function AdminTemplates() {
           ))}
         </div>
       )}
+      </>}
       {adding && (
         <Modal title={`Nueva plantilla de ${type === 'diet' ? 'dieta' : 'rutina'}`} onClose={() => !busy && setAdding(false)}
           footer={<><button className="btn ghost" disabled={busy} onClick={() => setAdding(false)}>Cancelar</button><button className="btn sage" disabled={busy} onClick={save}>{busy ? (prog || 'Procesando…') : 'Guardar'}</button></>}>

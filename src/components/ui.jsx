@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { cx, initials } from '../lib/utils';
 import { exerciseImg } from '../data/exercises';
@@ -38,6 +39,7 @@ const P = {
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   copy: 'M8 8h12v12H8zM4 16V4h12',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  fork: 'M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1-3 4-3 7 0 2 1 3 3 3',
   share: 'M12 3v12M7 8l5-5 5 5M5 13v7h14v-7',
 };
 
@@ -105,7 +107,7 @@ export function Modal({ title, onClose, children, footer, wide }) {
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev; };
   }, [onClose]);
-  return (
+  return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={cx('modal', wide && 'wide')} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}>
         <div className="modal-head">
@@ -115,7 +117,8 @@ export function Modal({ title, onClose, children, footer, wide }) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -201,8 +204,8 @@ export function LineChart({ data, unit = 'kg', height = 220 }) {
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Gráfica de ${unit}`}>
       <defs>
         <linearGradient id="gradSage" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#7e8f6c" stopOpacity="0.45" />
-          <stop offset="1" stopColor="#7e8f6c" stopOpacity="0" />
+          <stop offset="0" stopColor="#ce8690" stopOpacity="0.45" />
+          <stop offset="1" stopColor="#ce8690" stopOpacity="0" />
         </linearGradient>
       </defs>
       {ticks.map((t, i) => (
@@ -223,7 +226,7 @@ export function LineChart({ data, unit = 'kg', height = 220 }) {
   );
 }
 
-export function Ring({ value, max, label, sub, color = '#5e6f4f' }) {
+export function Ring({ value, max, label, sub, color = '#6e2236' }) {
   const r = 52, c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(1, max ? value / max : 0));
   return (

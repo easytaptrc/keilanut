@@ -29,6 +29,70 @@ export const FOOD_PHOTOS = [
   { key: 'tacos-pescado', label: 'Tacos de pescado', tags: 'pescado tacos tilapia' },
   { key: 'atun-verduras', label: 'Atún con zanahoria y pepino', tags: 'atun pescado verduras ensalada' },
   { key: 'bowl-atun', label: 'Bowl de atún / pollo', tags: 'atun pollo bowl arroz' },
+  // Fotos de los planes base (biblioteca)
+  { key: 'k-huevo-con-espinacas', label: "Huevo con espinacas", tags: "huevo con espinacas" },
+  { key: 'k-rajas-poblanas-con-pollo', label: "Rajas poblanas con pollo", tags: "rajas poblanas con pollo" },
+  { key: 'k-avena-cocida-con-manzana-y-canela', label: "Avena cocida con manzana y canela", tags: "avena cocida con manzana y canela" },
+  { key: 'k-molletes-con-huevo', label: "Molletes con huevo", tags: "molletes con huevo" },
+  { key: 'k-pescado-con-verduras-a-la-mantequilla', label: "Pescado con verduras a la mantequilla", tags: "pescado con verduras a la mantequilla" },
+  { key: 'k-montadito-de-panela-con-nopal', label: "Montadito de panela con nopal", tags: "montadito de panela con nopal" },
+  { key: 'k-tostadas-rancheras-con-huevo', label: "Tostadas rancheras con huevo", tags: "tostadas rancheras con huevo" },
+  { key: 'k-guisado-de-carne-con-chile', label: "Guisado de carne con chile", tags: "guisado de carne con chile" },
+  { key: 'k-pan-tostado-con-queso-cottage', label: "Pan tostado con queso cottage", tags: "pan tostado con queso cottage" },
+  { key: 'k-hot-cakes-de-avena', label: "Hot cakes de avena", tags: "hot cakes de avena" },
+  { key: 'k-ensalada-de-pollo', label: "Ensalada de pollo", tags: "ensalada de pollo" },
+  { key: 'k-atun-con-zanahoria-y-pepino', label: "Atún con zanahoria y pepino", tags: "atun con zanahoria y pepino" },
+  { key: 'k-huevo-con-nopales', label: "Huevo con nopales", tags: "huevo con nopales" },
+  { key: 'k-tacos-de-carne', label: "Tacos de carne", tags: "tacos de carne" },
+  { key: 'k-pan-tostado-con-queso-cottage-2', label: "Pan tostado con queso cottage", tags: "pan tostado con queso cottage" },
+  { key: 'k-huevo-con-nopales-2', label: "Huevo con nopales", tags: "huevo con nopales" },
+  { key: 'k-pescado-empapelado', label: "Pescado empapelado", tags: "pescado empapelado" },
+  { key: 'k-quesadillas-con-espinaca', label: "Quesadillas con espinaca", tags: "quesadillas con espinaca" },
+  { key: 'k-omelette-con-frijoles', label: "Omelette con frijoles", tags: "omelette con frijoles" },
+  { key: 'k-tostadas-de-pollo', label: "Tostadas de pollo", tags: "tostadas de pollo" },
+  { key: 'k-bowl-de-yogurt-con-manzana', label: "Bowl de yogurt con manzana", tags: "bowl de yogurt con manzana" },
+  { key: 'k-huevo-con-espinacas-y-tomate', label: "Huevo con espinacas y tomate", tags: "huevo con espinacas y tomate" },
+  { key: 'k-guisado-de-carne-con-frijoles', label: "Guisado de carne con frijoles", tags: "guisado de carne con frijoles" },
+  { key: 'k-huevo-con-jamon', label: "Huevo con jamón", tags: "huevo con jamon" },
+  { key: 'k-pollo-con-pimientos-y-lentejas', label: "Pollo con pimientos y lentejas", tags: "pollo con pimientos y lentejas" },
+  { key: 'k-pan-tostado-con-pollo', label: "Pan tostado con pollo", tags: "pan tostado con pollo" },
+  { key: 'k-tacos-de-carne-2', label: "Tacos de carne", tags: "tacos de carne" },
+  { key: 'k-huevo-a-la-mexicana', label: "Huevo a la mexicana", tags: "huevo a la mexicana" },
+  { key: 'k-toast-con-queso-cottage-y-manzana', label: "Toast con queso cottage y manzana", tags: "toast con queso cottage y manzana" },
+  { key: 'k-ensalada-de-betabel-con-pollo', label: "Ensalada de betabel con pollo", tags: "ensalada de betabel con pollo" },
+  { key: 'k-alambre-de-res', label: "Alambre de res", tags: "alambre de res" },
+  { key: 'k-yogurt-con-frutos-rojos', label: "Yogurt con frutos rojos", tags: "yogurt con frutos rojos" },
+  { key: 'k-overnight-oats', label: "Overnight oats", tags: "overnight oats" },
+  { key: 'k-pasta-con-carne', label: "Pasta con carne", tags: "pasta con carne" },
+  { key: 'k-volcanes-de-carne', label: "Volcanes de carne", tags: "volcanes de carne" },
+  { key: 'k-huevo-con-jamon-2', label: "Huevo con jamón", tags: "huevo con jamon" },
+  { key: 'k-ensalada-de-pollo-fria', label: "Ensalada de pollo fria", tags: "ensalada de pollo fria" },
+  { key: 'k-sandwich-de-pollo-atun', label: "Sandwich de pollo/atun", tags: "sandwich de pollo atun" },
+  { key: 'k-mug-cake-con-chocolate', label: "Mug cake con chocolate", tags: "mug cake con chocolate" },
+  { key: 'k-hamburguesas-low-carb-2pzas', label: "Hamburguesas low carb (2pzas)", tags: "hamburguesas low carb 2pzas" },
+  { key: 'k-huevo-con-chorizo', label: "Huevo con chorizo", tags: "huevo con chorizo" },
+  { key: 'k-guisado-de-pollo-con-papa-y-salsa-de-tom', label: "Guisado de pollo con papa y salsa de tomate", tags: "guisado de pollo con papa y salsa de tom" },
+  { key: 'k-bowl-de-yogurt-con-fruta', label: "Bowl de yogurt con fruta", tags: "bowl de yogurt con fruta" },
+  { key: 'k-huaraches-de-carne', label: "Huaraches de carne", tags: "huaraches de carne" },
+  { key: 'k-sandwich-con-bufalo', label: "Sandwich con bufalo", tags: "sandwich con bufalo" },
+  { key: 'k-pollo-con-verduras-cocidas', label: "Pollo con verduras cocidas", tags: "pollo con verduras cocidas" },
+  { key: 'k-tacos-de-carne-3', label: "Tacos de carne", tags: "tacos de carne" },
+  { key: 'k-huevo-con-pan-tostado', label: "Huevo con pan tostado", tags: "huevo con pan tostado" },
+  { key: 'k-carne-con-verduras', label: "Carne con verduras", tags: "carne con verduras" },
+  { key: 'k-ensalada-de-atun', label: "Ensalada de atún", tags: "ensalada de atun" },
+  { key: 'k-proteina', label: "Proteina", tags: "proteina" },
+  { key: 'k-yogurt-con-fruta', label: "Yogurt con fruta", tags: "yogurt con fruta" },
+  { key: 'k-proteina-2', label: "Proteina", tags: "proteina" },
+  { key: 'k-alambre-de-pechuga-de-pollo', label: "Alambre de pechuga de pollo", tags: "alambre de pechuga de pollo" },
+  { key: 'k-caldo-tlalpeno-verduras-con-pollo-a-la-p', label: "Caldo tlalpeño/ verduras con pollo a la plancha", tags: "caldo tlalpeno verduras con pollo a la p" },
+  { key: 'k-sirloin', label: "Sirloin", tags: "sirloin" },
+  { key: 'k-huevo-a-tu-gusto', label: "Huevo a tu gusto", tags: "huevo a tu gusto" },
+  { key: 'k-proteina-a-la-plancha', label: "Proteina a la plancha", tags: "proteina a la plancha" },
+  { key: 'k-elige-lo-que-se-te-antoje-mas', label: "Elige lo que se te antoje más", tags: "elige lo que se te antoje mas" },
+  { key: 'k-bowl-de-fruta', label: "Bowl de fruta", tags: "bowl de fruta" },
+  { key: 'k-capuccino', label: "Capuccino", tags: "capuccino" },
+  { key: 'k-yogurt-con-fruta-2', label: "Yogurt con fruta", tags: "yogurt con fruta" },
+  { key: 'k-hot-cakes-de-avena-sabor-naranja-con-fru', label: "Hot cakes de avena sabor naranja con frutos rojos", tags: "hot cakes de avena sabor naranja con fru" },
 ];
 export const foodPhoto = (key) => (key ? `${PLAN_BASE}/food/${key}.jpg` : null);
 
@@ -46,6 +110,11 @@ export const SUPPLEMENTS = [
   { key: 'v-lattekafe', name: 'LatteKafe', img: 'v-lattekafe.png', dose: 'Diluir en 200 ml' },
   { key: 'v-performance', name: 'V-Performance', img: 'v-performance.png', dose: '1 scoop antes de entrenar' },
   { key: 'kombucha', name: 'Kombucha artesanal', img: 'kombucha.jpg', dose: 'Acompañar una comida' },
+  { key: 'creatina', name: 'Creatina monohidratada', img: 'creatina.png', dose: '5 g disueltos en un vaso de agua' },
+  { key: 'magnesio', name: 'Glicinato de magnesio', img: 'magnesio.png', dose: '2 tabletas antes de dormir' },
+  { key: 'electrolitos', name: 'Electrolitos (Seltz)', img: 'electrolitos.png', dose: '1 tableta en 500 ml de agua' },
+  { key: 'proteina-whey', name: 'Proteína whey', img: 'proteina-whey.png', dose: '1 scoop en 200 ml de agua' },
+  { key: 'pre-entreno', name: 'Pre-entreno', img: 'pre-entreno.png', dose: '1/2 a 1 scoop antes de entrenar' },
 ];
 export const SUPP_MAP = Object.fromEntries(SUPPLEMENTS.map((s) => [s.key, s]));
 export const suppImg = (key) => (SUPP_MAP[key] ? `${PLAN_BASE}/supp/${SUPP_MAP[key].img}` : null);
@@ -57,6 +126,7 @@ export const TIP_IMAGES = [
   { key: 'cafe', label: 'Café', src: `${PLAN_BASE}/deco/cafe.png` },
   { key: 'v-te-detox', label: 'Té detox', src: `${PLAN_BASE}/supp/v-te-detox.png` },
   { key: 'kombucha', label: 'Kombucha', src: `${PLAN_BASE}/supp/kombucha.jpg` },
+  { key: 'probioticos', label: 'Probióticos', src: `${PLAN_BASE}/supp/probioticos.jpg` },
 ];
 export const tipImg = (key) => TIP_IMAGES.find((t) => t.key === key)?.src || null;
 
@@ -74,7 +144,10 @@ export const STATIC_PAGES = {
   rutinaConceptos2: `${PLAN_BASE}/pages/rutina-conceptos-2.jpg`,
 };
 
-export const MEAL_SLOTS = ['ALMUERZO', 'SNACK OPCIONAL', 'COMIDA', 'SNACK MEDIA TARDE', 'CENA'];
+export const MEAL_SLOTS = ['DESAYUNO', 'ALMUERZO', 'SNACK OPCIONAL', 'SNACK MEDIO DÍA', 'COLACIÓN', 'COMIDA', 'SNACK MEDIA TARDE', 'PRE ENTRENO', 'CENA'];
+/** Snacks y colaciones se muestran como píldora verde (igual que en los PDF) */
+export const isSnack = (slot) => /^(SNACK|COLACI|MEDIO D|MEDIA TARDE|PRE ENTRENO)/i.test(String(slot || '').trim());
+export const slotLabel = (m) => [m.slot, m.time].filter(Boolean).join(' ');
 export const MAIN_SLOTS = ['ALMUERZO', 'COMIDA', 'CENA'];
 export const WEEK_DAYS = ['LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES'];
 export const BLOCK_KINDS = ['EJERCICIO SENCILLO', 'BI SERIE', 'TRI SERIE', 'CIRCUITO'];

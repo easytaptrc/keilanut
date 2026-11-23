@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Empty, ExerciseAnim, Icon, Modal, Ring, useToast } from './ui';
 import { EXERCISES, EXERCISE_MAP, GROUPS, groupLabel } from '../data/exercises';
-import { STATIC_PAGES, foodPhoto, suppImg, tipImg } from '../data/planAssets';
+import { STATIC_PAGES, foodPhoto, isSnack, slotLabel, suppImg, tipImg } from '../data/planAssets';
 import { GOALS, cx, fmtDate } from '../lib/utils';
 import { normalizeDiet, normalizeRoutine } from '../lib/plans';
 import { openFile } from '../lib/files';
@@ -37,12 +37,12 @@ function ZoomImage({ src, alt, className }) {
 }
 
 function MealCard({ m }) {
-  const snack = m.slot?.startsWith('SNACK');
+  const snack = isSnack(m.slot);
   return (
     <div className={cx('kmeal', snack && 'snack')}>
-      {m.photo && !snack && <img className="kmeal-photo" src={foodPhoto(m.photo)} alt={m.title} loading="lazy" />}
+      {m.photo && <img className="kmeal-photo" src={foodPhoto(m.photo)} alt={m.title} loading="lazy" />}
       <div className="kmeal-body">
-        <div className={snack ? 'snack-pill' : 'kmeal-slot'}>{m.slot}</div>
+        <div className={snack ? 'snack-pill' : 'kmeal-slot'}>{slotLabel(m)}</div>
         {m.title && <div className="kmeal-title">{m.title}</div>}
         {(m.sections || []).map((s, i) => (
           <div key={i} className="kmeal-sec">
@@ -102,6 +102,7 @@ export function DietView({ diet: raw, updatedAt }) {
               <h2 className="day-title">{d.day}</h2>
               {d.tip?.text && <div className="kraft-band small">{d.tip.image && <img src={tipImg(d.tip.image)} alt="" />}<p>{d.tip.text}</p></div>}
               <div className="kmeal-grid">{d.meals.map((meal, i) => <MealCard key={i} m={meal} />)}</div>
+              {d.note && <div className="notice small"><b>{d.note}</b></div>}
             </div>
           )}
         </>
@@ -119,6 +120,28 @@ export function DietView({ diet: raw, updatedAt }) {
             ))}
           </div>
           {diet.waterLiters ? <p className="small" style={{ margin: 0 }}><b>Agua:</b> {diet.waterLiters} litros al día.</p> : null}
+        </div>
+      )}
+
+      {!!diet.equivalents?.length && (
+        <div className="card stack">
+          <h3 className="kheading">Tabla de <span>equivalentes</span></h3>
+          <p className="small muted" style={{ margin: 0 }}>Puedes cambiar un alimento por otro del mismo grupo; cada renglón es 1 porción.</p>
+          <div className="equiv-grid">
+            {diet.equivalents.map((g, i) => (
+              <details key={i} className="equiv" open={i === 0}>
+                <summary><b>{g.group}</b>{g.portion && <span className="tiny muted"> · {g.portion}</span>}</summary>
+                <ul>{(g.items || []).filter(Boolean).map((it, j) => <li key={j}>{it}</li>)}</ul>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!!diet.instructions?.filter(Boolean).length && (
+        <div className="card flat">
+          <h3 className="kheading">Instrucciones</h3>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>{diet.instructions.filter(Boolean).map((r, i) => <li key={i} style={{ marginBottom: 6 }}>{r}</li>)}</ul>
         </div>
       )}
 
@@ -140,7 +163,7 @@ export function DietView({ diet: raw, updatedAt }) {
           <ZoomImage src={STATIC_PAGES.necesitas} alt="Lo que necesitas para medir tus porciones" />
         </div>
       </div>
-      {diet.notes && <p className="small muted">{diet.notes}</p>}
+      {diet.notes && <div className="notice small" style={{ whiteSpace: 'pre-line' }}>{diet.notes}</div>}
     </div>
   );
 }

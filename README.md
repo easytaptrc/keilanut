@@ -33,6 +33,15 @@ nutricional** (salud, nutrición, hábitos, actividad física, objetivos, evalua
 Al terminar se programa la **próxima revisión a 3 semanas** (o la fecha que pongas).
 El historial clínico solo lo ve la nutrióloga.
 
+### Planes base (biblioteca)
+Panel → **Planes y plantillas → Planes base**: 8 planes reales de Keila convertidos a la app (déficit, anemia,
+recomposición con 3 menús, ayuno 16 h, porciones con tabla de equivalentes) con sus fotos, horarios, suplementos,
+instrucciones y recomendaciones. En el expediente (pestaña **Dieta → Mis planes base**) se ordenan según el
+paciente (sexo, edad, peso, estatura, objetivo, anemia, comidas al día); “Usar este plan” lo carga en el editor
+para ajustarlo y publicarlo. “Guardar como plan base” agrega cualquier plan a la biblioteca (colección
+`planLibrary`, solo administradora). La IA recibe los 3 planes base más parecidos (o el que elijas) como punto de
+partida.
+
 ### Planes con el diseño de Keila
 - **Dieta:** 5 días (Lunes a Viernes) con Almuerzo, Comida, Cena y snacks; foto de cada platillo, tip del día,
   suplementos con su imagen, recomendaciones. **Rutina:** días por grupo muscular con bloques (ejercicio sencillo,

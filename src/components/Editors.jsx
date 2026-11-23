@@ -36,6 +36,31 @@ function PhotoPicker({ value, onPick, onClose }) {
   );
 }
 
+function EquivalentsEditor({ value, onChange }) {
+  const setG = (i, patch) => onChange(value.map((g, k) => (k === i ? { ...g, ...patch } : g)));
+  return (
+    <div className="card flat stack" style={{ padding: 14 }}>
+      <div className="row between">
+        <h4 style={{ margin: 0 }}>Tabla de equivalentes</h4>
+        <button type="button" className="btn light sm" onClick={() => onChange([...value, { group: 'NUEVO GRUPO', portion: '1 PORCIÓN', items: [] }])}><Icon name="plus" size={16} /> Grupo</button>
+      </div>
+      {!value.length && <p className="tiny muted" style={{ margin: 0 }}>Opcional. Útil en planes por porciones (cereales, proteína, grasas, fruta, verdura…).</p>}
+      <div className="equiv-grid">
+        {value.map((g, i) => (
+          <div key={i} className="equiv stack" style={{ gap: 6 }}>
+            <div className="row nowrap">
+              <input className="input sm grow" value={g.group} aria-label="Grupo" onChange={(e) => setG(i, { group: e.target.value.toUpperCase() })} />
+              <button type="button" className="btn ghost xs" aria-label="Quitar grupo" onClick={() => onChange(value.filter((_, k) => k !== i))}><Icon name="x" size={14} /></button>
+            </div>
+            <input className="input sm" value={g.portion || ''} placeholder="1 PORCIÓN" onChange={(e) => setG(i, { portion: e.target.value })} />
+            <textarea className="textarea" rows={6} value={lines(g.items)} placeholder="Un alimento por renglón" onChange={(e) => setG(i, { items: e.target.value.split('\n') })} onBlur={(e) => setG(i, { items: unlines(e.target.value) })} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionsEditor({ sections, onChange }) {
   const set = (i, patch) => onChange(sections.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   return (
@@ -126,7 +151,7 @@ export function DietEditor({ value, onChange }) {
             <img src={suppImg(s.key)} alt="" />
             <input className="input sm" value={s.name} onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
             <select className="select sm" value={s.when} onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, when: e.target.value } : x)))}>
-              {['En ayunas', 'Después del desayuno', 'Antes de entrenar', 'Después de entrenar', 'Con la comida', 'Antes de dormir'].map((w) => <option key={w}>{w}</option>)}
+              {[...new Set(['En ayunas', 'Después del desayuno', 'Antes de entrenar', 'Después de entrenar', 'Con la comida', 'Antes de dormir', s.when].filter(Boolean))].map((w) => <option key={w}>{w}</option>)}
             </select>
             <input className="input sm" value={s.dose} placeholder="Dosis" onChange={(e) => set('supplements', v.supplements.map((x, k) => (k === i ? { ...x, dose: e.target.value } : x)))} />
           </div>
@@ -156,16 +181,18 @@ export function DietEditor({ value, onChange }) {
               </select>
               {d.tip?.image && <img src={tipImg(d.tip.image)} alt="" style={{ width: 34, height: 34, objectFit: 'contain' }} />}
             </div>
+            <input className="input sm" value={d.note || ''} placeholder="Nota del día (ej. Al terminar la opción 3 volver a repetir la opción 1)" onChange={(e) => setDayData({ note: e.target.value })} />
             {d.meals.map((m, i) => (
               <div key={i} className="meal-edit">
                 <button type="button" className="meal-photo" onClick={() => setPhotoFor(i)} title="Cambiar foto">
                   {m.photo ? <img src={foodPhoto(m.photo)} alt="" /> : <span><Icon name="camera" size={20} /><br />Foto</span>}
                 </button>
                 <div className="stack grow" style={{ gap: 8, minWidth: 0 }}>
-                  <div className="row nowrap">
+                  <div className="row meal-head">
                     <select className="select sm" style={{ maxWidth: 190 }} value={m.slot} onChange={(e) => setMeal(i, { slot: e.target.value })}>
                       {[...new Set([...MEAL_SLOTS, m.slot])].map((s) => <option key={s}>{s}</option>)}
                     </select>
+                    <input className="input sm" style={{ width: 96 }} value={m.time || ''} placeholder="Hora" aria-label="Hora" onChange={(e) => setMeal(i, { time: e.target.value.toUpperCase() })} />
                     <input className="input sm grow" value={m.title} placeholder="Nombre del platillo" onChange={(e) => setMeal(i, { title: e.target.value.toUpperCase() })} />
                     <Mover list={d.meals} i={i} onChange={(x) => setDayData({ meals: x })} label="comida" />
                   </div>
@@ -182,6 +209,8 @@ export function DietEditor({ value, onChange }) {
         <Field label="Recomendaciones (una por renglón)"><textarea className="textarea" value={lines(v.recommendations)} onChange={(e) => set('recommendations', e.target.value.split('\n'))} onBlur={(e) => set('recommendations', unlines(e.target.value))} /></Field>
         <Field label="Evitar (una por renglón)"><textarea className="textarea" value={lines(v.avoid)} onChange={(e) => set('avoid', e.target.value.split('\n'))} onBlur={(e) => set('avoid', unlines(e.target.value))} /></Field>
       </div>
+      <Field label="Instrucciones (una por renglón)"><textarea className="textarea" value={lines(v.instructions)} onChange={(e) => set('instructions', e.target.value.split('\n'))} onBlur={(e) => set('instructions', unlines(e.target.value))} /></Field>
+      <EquivalentsEditor value={v.equivalents || []} onChange={(x) => set('equivalents', x)} />
       <Field label="Notas para el paciente"><textarea className="textarea" value={v.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
       {photoFor != null && d && <PhotoPicker value={d.meals[photoFor]?.photo} onClose={() => setPhotoFor(null)} onPick={(k) => { setMeal(photoFor, { photo: k }); setPhotoFor(null); }} />}
     </div>

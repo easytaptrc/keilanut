@@ -8,6 +8,8 @@ import { Badge, Empty, Field, Icon, Modal, Spinner, useToast } from '../../compo
 import { energy } from '../../lib/nutrition';
 import { draftDiet, draftRoutine, emptyDiet, emptyRoutine, normalizeDiet, normalizeRoutine } from '../../lib/plans';
 import { useContact } from '../Home';
+import { PlanLibraryBrowser, usePlanLibrary } from '../../components/PlanLibrary';
+import { libraryPlanText, planFromLibrary, rankLibrary, saveToLibrary, tagsFromMember } from '../../lib/library';
 
 import { notifyMember } from '../../lib/admin';
 import { deleteFile, uploadFile } from '../../lib/files';
@@ -32,6 +34,9 @@ export default function PlanTab({ member, kind }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState(null); // estado del modal IA
+  const [libOpen, setLibOpen] = useState(false);
+  const [saveLib, setSaveLib] = useState(null);
+  const library = usePlanLibrary();
   const fileRef = useRef();
 
   // Carga inicial: borrador > publicado > vacío
@@ -84,13 +89,36 @@ export default function PlanTab({ member, kind }) {
     toast('Borrador automático generado. Revísalo antes de publicar.', 'ok');
   };
 
+  const applyBase = (entry) => {
+    const hasContent = value?.days?.length;
+    if ((dirty || hasContent) && !window.confirm(`Esto reemplazará el contenido actual del editor con “${entry.title}”. ¿Continuar?`)) return;
+    change(planFromLibrary(entry));
+    setLibOpen(false); setMode('edit');
+    toast({ title: 'Plan base cargado', body: 'Ajusta porciones, fechas de check y cambio de plan antes de publicar.', duration: 7000 }, 'ok');
+  };
+
+  const doSaveLib = async () => {
+    if (!saveLib.title.trim()) return toast('Ponle un nombre al plan', 'err');
+    setBusy(true);
+    try {
+      await saveToLibrary({ title: saveLib.title.trim(), description: saveLib.description.trim(), tags: tagsFromMember(member), plan: value });
+      setSaveLib(null); toast('Guardado en tu biblioteca de planes base', 'ok');
+    } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+
   const runAI = async () => {
     setAi((x) => ({ ...x, running: true, status: 'Preparando…', error: '' }));
     try {
       const chosen = templates.filter((t) => ai.selected.includes(t.id));
       const { generateWithAI } = await import('../../lib/ai');
+      let bases = [];
+      if (isDiet) {
+        const ranked = rankLibrary(library.list, member, clinical);
+        bases = ai.base === 'none' ? [] : ai.base && ai.base !== 'auto' ? ranked.filter((e) => e.id === ai.base) : ranked.slice(0, 3);
+      }
       const result = await generateWithAI({
         kind, profile: member, progress, clinical, templates: chosen, instructions: ai.instructions,
+        library: bases.map((e) => ({ title: e.title, description: e.description, text: libraryPlanText(e) })),
         apiKey: settings?.anthropicKey, model: settings?.model, onStatus: (s) => setAi((x) => ({ ...x, status: s })),
       });
       const { rationale, ...plan } = result;
@@ -119,8 +147,10 @@ export default function PlanTab({ member, kind }) {
             </div>
           </div>
           <div className="row">
+            {isDiet && <button className="btn light sm" onClick={() => setLibOpen(true)}><Icon name="file" size={16} /> Mis planes base</button>}
+            {isDiet && !!value.days?.length && <button className="btn light sm" disabled={busy} onClick={() => setSaveLib({ title: value.baseTitle ? `${value.baseTitle} (ajustado)` : value.title || '', description: '' })}><Icon name="plus" size={16} /> Guardar como plan base</button>}
             <button className="btn light sm" onClick={auto}><Icon name="leaf" size={16} /> Borrador automático</button>
-            <button className="btn sage sm" onClick={() => setAi({ selected: templates.slice(0, 3).map((t) => t.id), instructions: '', running: false })}><Icon name="sparkle" size={16} /> Generar con IA</button>
+            <button className="btn sage sm" onClick={() => setAi({ selected: templates.slice(0, 3).map((t) => t.id), instructions: '', base: 'auto', running: false })}><Icon name="sparkle" size={16} /> Generar con IA</button>
           </div>
         </div>
         {isDiet && e && <div className="small muted mt">Referencia: GET {e.tdee} kcal · sugerido {e.kcal} kcal · P {e.protein} g · C {e.carbs} g · G {e.fat} g · agua {e.water} L</div>}
@@ -175,6 +205,15 @@ export default function PlanTab({ member, kind }) {
                 </div>
               )}
             </Field>
+            {isDiet && (
+              <Field label="Plan base de tu biblioteca" hint="La IA parte de tu plan real y lo ajusta a este paciente.">
+                <select className="select" value={ai.base} onChange={(ev) => setAi((x) => ({ ...x, base: ev.target.value }))}>
+                  <option value="auto">Automático: los 3 más parecidos a {member.firstName}</option>
+                  {rankLibrary(library.list, member, clinical).map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
+                  <option value="none">Ninguno (solo plantillas y criterios generales)</option>
+                </select>
+              </Field>
+            )}
             <Field label="Indicaciones adicionales (opcional)">
               <textarea className="textarea" value={ai.instructions} onChange={(ev) => setAi((x) => ({ ...x, instructions: ev.target.value }))}
                 placeholder={isDiet ? 'Ej. 1500 kcal, sin lácteos, desayuno rápido para llevar, 2 opciones por comida…' : 'Ej. 4 días, enfoque glúteo, rodilla lastimada, entrena en casa con mancuernas…'} />
@@ -183,7 +222,22 @@ export default function PlanTab({ member, kind }) {
           </div>
         </Modal>
       )}
-      {!pub.data && !draft.data && !dirty && <Empty icon={isDiet ? '🥗' : '🏋️'}>Empieza con el borrador automático, con la IA o captura el plan manualmente.</Empty>}
+      {libOpen && (
+        <Modal wide title={<span className="row nowrap"><Icon name="file" /> Mis planes base</span>} onClose={() => setLibOpen(false)}>
+          <PlanLibraryBrowser member={member} clinical={clinical} onUse={applyBase} />
+        </Modal>
+      )}
+      {saveLib && (
+        <Modal title="Guardar como plan base" onClose={() => !busy && setSaveLib(null)}
+          footer={<><button className="btn ghost" disabled={busy} onClick={() => setSaveLib(null)}>Cancelar</button><button className="btn sage" disabled={busy} onClick={doSaveLib}>Guardar</button></>}>
+          <div className="stack">
+            <p className="small muted" style={{ margin: 0 }}>Se guarda una copia de este plan (sin nombre del paciente ni fechas) para reutilizarla con otros pacientes y como referencia de la IA.</p>
+            <Field label="Nombre del plan" required><input className="input" value={saveLib.title} onChange={(e) => setSaveLib((x) => ({ ...x, title: e.target.value }))} placeholder="Ej. Déficit 1500 kcal · mujer 30–40 · SOP" /></Field>
+            <Field label="¿Para quién es?"><textarea className="textarea" value={saveLib.description} onChange={(e) => setSaveLib((x) => ({ ...x, description: e.target.value }))} placeholder="Ej. Mujeres de 30 a 40 años, 70–85 kg, actividad ligera, con resistencia a la insulina." /></Field>
+          </div>
+        </Modal>
+      )}
+      {!pub.data && !draft.data && !dirty && <Empty icon={isDiet ? '🥗' : '🏋️'}>Empieza con uno de tus planes base, el borrador automático, la IA o captura el plan manualmente.</Empty>}
     </div>
   );
 }

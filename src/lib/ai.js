@@ -26,9 +26,11 @@ const DIET_SCHEMA = obj({
   days: arr(obj({
     day: str,
     tip: obj({ text: str, image: oneOf(['', ...TIP_IMAGES.map((t) => t.key)]) }),
-    meals: arr(obj({ slot: oneOf(MEAL_SLOTS), title: str, photo: oneOf(['', ...FOOD_PHOTOS.map((p) => p.key)]), sections: arr(obj({ label: str, items: arr(str) })) })),
+    meals: arr(obj({ slot: oneOf(MEAL_SLOTS), time: str, title: str, photo: oneOf(['', ...FOOD_PHOTOS.map((p) => p.key)]), sections: arr(obj({ label: str, items: arr(str) })) })),
+    note: str,
   })),
-  recommendations: arr(str), avoid: arr(str), notes: str, rationale: str,
+  equivalents: arr(obj({ group: str, portion: str, items: arr(str) })),
+  instructions: arr(str), recommendations: arr(str), avoid: arr(str), notes: str, rationale: str,
 });
 
 const ROUTINE_SCHEMA = obj({
@@ -76,13 +78,17 @@ const SYSTEM = `Eres el asistente clínico de la Lic. en Nutrición Keila Guerre
 Reglas:
 - Respeta estrictamente alergias, intolerancias, diagnósticos, medicamentos, embarazo/lactancia, lesiones y trastornos de la conducta alimentaria. Si algo requiere supervisión médica, indícalo en "notes".
 - Usa EXACTAMENTE el estilo de los planes de Keila: mismo tipo de platillos mexicanos caseros, porciones en piezas/tazas/cucharadas/gramos ("2pzas de huevo", "120gr de pechuga", "1/4tza", "1cdita"), secciones "Utilizar", "Elige solo una opción para acompañar" (Opción 1/Opción 2), "Toppings", "Acompañar con", nombres de platillo en MAYÚSCULAS, y tips del día (bebidas como agua de jamaica, café permitido, kéfir).
-- Dieta: 5 días (LUNES a VIERNES); en fin de semana se repite el día favorito. Cada día lleva ALMUERZO, COMIDA y CENA, más snacks ("SNACK OPCIONAL", "SNACK MEDIA TARDE") según las comidas que tolera la persona. Varía los platillos entre días. Elige "photo" del catálogo que más se parezca al platillo (o "" si ninguno). Ajusta porciones a las calorías y macros objetivo.
+- PLANES BASE: si recibes documentos "Plan base de Keila", son planes reales suyos. Elige el que mejor se ajuste a la persona (o el que Keila indique) y úsalo como punto de partida: conserva su estructura (OPCIÓN 1/2/3, días o porciones), horarios ("time"), platillos, fotos, suplementos, instrucciones, recomendaciones y tabla de equivalentes; ajusta porciones, alimentos y suplementos a esta persona (peso, objetivo, alergias, condiciones, horarios, comidas al día). Puedes combinar platillos de varios planes base.
+- Dieta (si no hay plan base que indique otra cosa): 5 días (LUNES a VIERNES); en fin de semana se repite el día favorito. Cada día lleva ALMUERZO, COMIDA y CENA, más snacks ("SNACK OPCIONAL", "SNACK MEDIA TARDE") según las comidas que tolera la persona. Varía los platillos entre días. Elige "photo" del catálogo que más se parezca al platillo (o "" si ninguno). Ajusta porciones a las calorías y macros objetivo.
 - Suplementos: sugiere solo los del catálogo y solo si están indicados para la persona (sin contraindicaciones con sus medicamentos o condiciones).
 - Rutina: días nombrados por grupo muscular (ej. "CUADRÍCEPS", "PULL / BÍCEPS", "GLÚTEO", "PUSH / TRÍCEPS", "FEMORAL"); bloques "EJERCICIO SENCILLO", "BI SERIE" o "TRI SERIE" con número de series; cada ejercicio con indicaciones al estilo de Keila (serie de aproximación, rango de repeticiones, cadencia). Usa exerciseId del catálogo; "custom" solo si es indispensable. Respeta lesiones y ejercicios que prefiere evitar.
 - En "rationale" explica a Keila en 3–5 líneas por qué elegiste ese enfoque.`;
 
-function buildContent(kind, profile, ctx, templates, instructions) {
+function buildContent(kind, profile, ctx, templates, instructions, library = []) {
   const content = [];
+  for (const b of library) {
+    content.push({ type: 'document', source: { type: 'text', media_type: 'text/plain', data: b.text.slice(0, 60000) }, title: `Plan base de Keila: ${b.title}`, context: `Plan real de Keila para: ${b.description || b.title}. Úsalo como referencia principal de estructura, platillos, porciones y suplementos.` });
+  }
   for (const t of templates) {
     if (t.base64) {
       content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: t.base64 }, title: t.title, context: `Plantilla de Keila. Para qué es: ${t.purpose || 'no especificado'}. ${t.notes || ''}` });
@@ -101,7 +107,7 @@ function buildContent(kind, profile, ctx, templates, instructions) {
   return content;
 }
 
-export async function generateWithAI({ kind, profile, progress = [], clinical = null, templates = [], instructions = '', apiKey, model, onStatus }) {
+export async function generateWithAI({ kind, profile, progress = [], clinical = null, templates = [], library = [], instructions = '', apiKey, model, onStatus }) {
   if (!apiKey) throw new Error('Configura tu llave de API de Claude en Ajustes para usar la IA.');
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   onStatus?.('Leyendo plantillas…');
@@ -116,7 +122,7 @@ export async function generateWithAI({ kind, profile, progress = [], clinical = 
     max_tokens: 48000,
     system: SYSTEM,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: kind === 'diet' ? DIET_SCHEMA : ROUTINE_SCHEMA } },
-    messages: [{ role: 'user', content: buildContent(kind, profile, { progress, clinical }, loaded, instructions) }],
+    messages: [{ role: 'user', content: buildContent(kind, profile, { progress, clinical }, loaded, instructions, library) }],
   };
   onStatus?.('La IA está elaborando el borrador… (puede tardar 1–3 minutos)');
   let msg;

@@ -111,7 +111,7 @@ export default function AdminMember() {
   return (
     <div className="stack" style={{ gap: 18 }}>
       <Link to="/admin/team" className="btn link small" style={{ alignSelf: 'flex-start', paddingLeft: 0 }}><Icon name="arrowL" size={16} /> Team</Link>
-      <div className="card row" style={{ gap: 18 }}>
+      <div className="card row member-head" style={{ gap: 18 }}>
         <Avatar person={m} size="lg" />
         <div className="grow">
           <h2 style={{ margin: 0 }}>{fullName(m)}</h2>

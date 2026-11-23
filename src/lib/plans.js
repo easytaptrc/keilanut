@@ -8,7 +8,7 @@ const S = (label, items) => ({ label, items });
 export const emptyDiet = () => ({
   version: 2, title: 'Plan de alimentación', goal: '', calories: '', macros: { protein: '', carbs: '', fat: '' }, waterLiters: '',
   checkFrom: '', checkTo: '', nextChange: '',
-  dailyTip: { text: '', image: '' }, supplements: [], days: [], recommendations: [], avoid: [], notes: '',
+  dailyTip: { text: '', image: '' }, supplements: [], days: [], equivalents: [], instructions: [], recommendations: [], avoid: [], notes: '',
 });
 
 export const emptyRoutine = () => ({

@@ -3,7 +3,7 @@ import { PDFDocument, StandardFonts, rgb, pushGraphicsState, popGraphicsState, m
 import fontkit from '@pdf-lib/fontkit';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PLAN_BASE, STATIC_PAGES, SUPP_MAP, foodPhoto, suppImg, tipImg } from '../data/planAssets';
+import { PLAN_BASE, STATIC_PAGES, SUPP_MAP, foodPhoto, isSnack, slotLabel, suppImg, tipImg } from '../data/planAssets';
 import { EXERCISE_MAP } from '../data/exercises';
 import { normalizeDiet, normalizeRoutine } from './plans';
 import { ageFrom, bmi, fmtDate, fullName } from './utils';
@@ -266,10 +266,10 @@ async function suplementos(d, diet) {
 /** Dibuja una comida en una columna y devuelve la altura usada */
 async function mealBlock(d, m, x, top, w, size, dry = false) {
   let h = 0;
-  const snack = m.slot?.startsWith('SNACK');
-  if (!snack && m.photo) { if (!dry) await d.photo(foodPhoto(m.photo), x, top, w, 102, 14); h += 108; }
-  if (snack) { if (!dry) d.pill(m.slot, x + w / 2, top + h, { bg: C.snack, color: C.white, font: d.bold, size: 14, h: 26, padX: 22 }); h += 32; }
-  else { if (!dry) d.text(m.slot, x, top + h, { font: d.bold, size: 14, align: 'center', w }); h += 18; }
+  const snack = isSnack(m.slot);
+  if (m.photo) { if (!dry) await d.photo(foodPhoto(m.photo), x, top, w, 102, 14); h += 108; }
+  if (snack) { if (!dry) d.pill(slotLabel(m), x + w / 2, top + h, { bg: C.snack, color: C.white, font: d.bold, size: 14, h: 26, padX: 22 }); h += 32; }
+  else { if (!dry) d.text(slotLabel(m), x, top + h, { font: d.bold, size: 14, align: 'center', w }); h += 18; }
   if (m.title) h += d.para(m.title, x, top + h, w, { font: d.boldItalic, size: size - 0.5, align: 'center', dry }) + 4;
   for (const s of m.sections || []) {
     const items = (s.items || []).filter(Boolean);
@@ -300,13 +300,13 @@ async function diaPagina(d, day, dailyTip) {
     top += 56;
   } else top += 10;
 
-  const main = day.meals.filter((m) => !m.slot?.startsWith('SNACK'));
-  const snacks = day.meals.filter((m) => m.slot?.startsWith('SNACK'));
+  const main = day.meals.filter((m) => !isSnack(m.slot));
+  const snacks = day.meals.filter((m) => isSnack(m.slot));
   const ncol = Math.max(3, Math.min(4, main.length));
   const gap = 24, colW = (DW - 48 - gap * (ncol - 1)) / ncol;
   // Asigna snacks a las columnas (1ª y última, como en el plan original)
   const cols = Array.from({ length: ncol }, (_, i) => [main[i]].filter(Boolean));
-  snacks.forEach((s, i) => cols[i === 0 ? 0 : ncol - 1 - ((i - 1) % ncol)].push(s));
+  snacks.forEach((s, i) => cols[!main.length ? i % ncol : i === 0 ? 0 : ncol - 1 - ((i - 1) % ncol)].push(s));
   main.slice(ncol).forEach((m, i) => cols[i % ncol].push(m));
   // Ajusta el tamaño de letra para que todo quepa en la página
   let size = 9.5;
@@ -315,7 +315,7 @@ async function diaPagina(d, day, dailyTip) {
     for (const col of cols) {
       let h = 0;
       for (const m of col) h += (await mealBlock(d, m, 0, 0, colW, size, true)) + 14;
-      if (top + h > DH - 34) { fits = false; break; }
+      if (top + h > DH - (day.note ? 54 : 34)) { fits = false; break; }
     }
     if (fits) break;
   }
@@ -324,7 +324,43 @@ async function diaPagina(d, day, dailyTip) {
     const x = 24 + i * (colW + gap);
     for (const m of col) t += (await mealBlock(d, m, x, t, colW, size)) + 14;
   }
+  if (day.note) d.para(day.note, 80, DH - 50, DW - 160, { font: d.bold, size: 10, align: 'center', color: C.rust });
   d.pill('@lic.guerrero.k', DW / 2, DH - 30, { size: 9, h: 18 });
+}
+
+/** Tabla de equivalentes en columnas (una o más páginas) */
+async function equivalentes(d, diet) {
+  const groups = (diet.equivalents || []).filter((g) => g.group || g.items?.length);
+  if (!groups.length) return;
+  const ncol = 4, gap = 16, colW = (DW - 60 - gap * (ncol - 1)) / ncol, top0 = 92, bottom = DH - 40, size = 8.5;
+  const newPage = async () => {
+    d.page(); await d.bg(`${PLAN_BASE}/bg-marble.jpg`);
+    d.text('EQUIVALENTES', 0, 22, { font: d.londrina, size: 40, color: C.rust, align: 'center', w: DW });
+    d.text('Cada renglón equivale a 1 porción: puedes intercambiar alimentos del mismo grupo.', 0, 68, { font: d.italic, size: 10, align: 'center', w: DW });
+    d.pill('@lic.guerrero.k', DW / 2, DH - 30, { size: 9, h: 18 });
+  };
+  await newPage();
+  let col = 0, t = top0;
+  for (const g of groups) {
+    const items = (g.items || []).filter(Boolean);
+    const head = 22 + (g.portion ? 12 : 0);
+    let k = 0;
+    while (k < items.length || k === 0) {
+      if (t + head + (items.length > 2 ? 36 : 12) > bottom) { col++; t = top0; if (col >= ncol) { await newPage(); col = 0; } }
+      const x = 30 + col * (colW + gap);
+      d.text(g.group + (k ? ' (cont.)' : ''), x, t, { font: d.londrina, size: 16, color: C.green });
+      if (g.portion) d.text(g.portion, x, t + 19, { font: d.semi, size: 8.5 });
+      t += head;
+      while (k < items.length) {
+        const h = d.bullets([items[k]], x, t, colW, { font: d.reg, size, dry: true, lh: 1.15 });
+        if (t + h > bottom) break;
+        d.bullets([items[k]], x, t, colW, { font: d.reg, size, lh: 1.15 });
+        t += h; k++;
+      }
+      t += 10;
+      if (!items.length) break;
+    }
+  }
 }
 
 async function recomendaciones(d, diet) {
@@ -371,6 +407,7 @@ export async function dietPdf(rawDiet, person, { contact } = {}) {
   await d.staticPage(STATIC_PAGES.instrucciones);
   if (diet.supplements?.length) await suplementos(d, diet);
   for (const day of diet.days) await diaPagina(d, day, diet.dailyTip);
+  await equivalentes(d, diet);
   await recomendaciones(d, diet);
   await d.staticPage(STATIC_PAGES.marcas1);
   await d.staticPage(STATIC_PAGES.marcas2);

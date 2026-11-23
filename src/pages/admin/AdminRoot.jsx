@@ -108,7 +108,7 @@ const NAV = [
   ['', 'home', 'Inicio'],
   ['reservaciones', 'calendar', 'Reservaciones'],
   ['team', 'users', 'Team'],
-  ['plantillas', 'sparkle', 'Plantillas IA'],
+  ['plantillas', 'sparkle', 'Planes y plantillas'],
   ['avisos', 'bell', 'Notificaciones'],
   ['ajustes', 'settings', 'Ajustes'],
 ];
