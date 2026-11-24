@@ -1,6 +1,6 @@
 /* Service worker: caché offline básico + notificaciones push (FCM). */
-importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/13.4.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/13.4.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
   apiKey: 'AIzaSyDV3SVxoFv0Lk6OwnE7-c3Upp55pcKxIqg',
@@ -39,7 +39,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // --- Caché ---
-const CACHE = 'kg-v2';
+const CACHE = 'kg-v3';
 const SHELL = ['/', '/index.html', '/logo.png', '/monogram.png', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
