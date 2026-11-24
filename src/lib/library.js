@@ -3,10 +3,15 @@ import { addDoc, collection, deleteDoc, doc, serverTimestamp } from 'firebase/fi
 import { db } from '../firebase';
 import { ageFrom } from './utils';
 import { clinicalText } from '../data/clinical';
-import { normalizeDiet } from './plans';
+import { normalizeDiet, normalizeRoutine } from './plans';
+import { EXERCISE_MAP } from '../data/exercises';
 
 /** Planes incluidos (se cargan bajo demanda para no hacer pesada la app) */
-export const loadBuiltInLibrary = () => import('../data/planLibrary').then((m) => m.PLAN_LIBRARY);
+export const loadBuiltInLibrary = (kind = 'diet') => (kind === 'routine'
+  ? import('../data/routineLibrary').then((m) => m.ROUTINE_LIBRARY)
+  : import('../data/planLibrary').then((m) => m.PLAN_LIBRARY));
+export const LEVEL_LABEL = { principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado', 'principiante-intermedio': 'Principiante-intermedio' };
+export const PLACE_LABEL = { casa: 'En casa', gimnasio: 'Gimnasio' };
 
 export const SEX_LABEL = { hombre: 'Hombre', mujer: 'Mujer' };
 export const ACTIVITY_LABEL = { ligera: 'Actividad ligera', 'ligera-moderada': 'Actividad ligera-moderada', moderada: 'Actividad moderada', alta: 'Actividad alta' };
@@ -25,6 +30,10 @@ export function libraryTags(t = {}) {
     ...(t.conditions || []).map((c) => c[0].toUpperCase() + c.slice(1)),
     t.fasting && 'Ayuno 16 h',
     t.mealsPerDay && `${t.mealsPerDay} tiempos de comida`,
+    LEVEL_LABEL[t.level],
+    PLACE_LABEL[t.place],
+    t.daysPerWeek && `${t.daysPerWeek} días/semana`,
+    ...(t.focus || []).map((f) => f[0].toUpperCase() + f.slice(1)),
   ].filter(Boolean);
 }
 
@@ -65,6 +74,16 @@ export function matchScore(entry, member = {}, clinical = null) {
   const meals = Number(member.mealsPerDay);
   if (meals && t.mealsPerDay) score += Math.abs(meals - t.mealsPerDay) <= 1 ? 1 : 0;
   if (t.fasting && meals && meals <= 3) { score += 1.5; why.push('pocas comidas'); }
+  // Rutinas: nivel, días disponibles y lugar
+  if (t.level && member.trainingExperience) {
+    if (t.level.includes(member.trainingExperience)) { score += 2; why.push(LEVEL_LABEL[member.trainingExperience] || member.trainingExperience); }
+    else if (t.level === 'avanzado' && member.trainingExperience === 'principiante') score -= 2;
+  }
+  const td = Number(member.trainingDays);
+  if (td && t.daysPerWeek) { if (Math.abs(td - t.daysPerWeek) === 0) { score += 2; why.push(`${td} días`); } else if (Math.abs(td - t.daysPerWeek) === 1) score += 1; else score -= 1; }
+  if (t.place === 'casa' && /casa|sin gimnasio|sin material/.test(health)) { score += 3; why.push('entrena en casa'); }
+  if (t.place === 'gimnasio' && /casa|sin gimnasio|sin material/.test(health)) score -= 2;
+  for (const f of t.focus || []) if (f.length > 3 && health.includes(f.toLowerCase().slice(0, 6))) { score += 1; why.push(f); }
   return { score, why };
 }
 
@@ -73,23 +92,33 @@ export function rankLibrary(list, member, clinical) {
 }
 
 /** Copia del plan base lista para editar (sin fechas de check del original) */
-export function planFromLibrary(entry) {
+export function planFromLibrary(entry, kind = 'diet') {
+  if (kind === 'routine') {
+    const r = normalizeRoutine(structuredClone(entry.plan));
+    return { ...r, baseId: entry.id, baseTitle: entry.title };
+  }
   const p = normalizeDiet(structuredClone(entry.plan));
   return { ...p, goal: p.goal && p.goal.length < 20 ? p.goal : entry.tags?.goal || '', checkFrom: '', checkTo: '', nextChange: '', baseId: entry.id, baseTitle: entry.title };
 }
 
 /** Guarda un plan como base reutilizable (colección privada de la administradora) */
-export async function saveToLibrary({ title, description, tags, plan }) {
+export async function saveToLibrary({ kind = 'diet', title, description, tags, plan }) {
   const clean = { ...plan };
   delete clean.checkFrom; delete clean.checkTo; delete clean.nextChange;
-  const ref = await addDoc(collection(db, 'planLibrary'), { title, description: description || '', tags: tags || {}, plan: clean, createdAt: serverTimestamp() });
+  const ref = await addDoc(collection(db, 'planLibrary'), { kind, title, description: description || '', tags: tags || {}, plan: clean, createdAt: serverTimestamp() });
   return ref.id;
 }
 export const deleteFromLibrary = (id) => deleteDoc(doc(db, 'planLibrary', id));
 
 /** Etiquetas que describen a un paciente (para guardar su plan como base) */
-export function tagsFromMember(m = {}) {
+export function tagsFromMember(m = {}, kind = 'diet', plan = {}) {
   const age = ageFrom(m.birthDate);
+  if (kind === 'routine') {
+    return {
+      goal: m.goal || '', sex: m.sex === 'masculino' ? 'hombre' : m.sex === 'femenino' ? 'mujer' : '',
+      level: plan.level || m.trainingExperience || '', place: '', daysPerWeek: plan.days?.length || Number(m.trainingDays) || null, focus: [],
+    };
+  }
   return {
     goal: m.goal || '', sex: m.sex === 'masculino' ? 'hombre' : m.sex === 'femenino' ? 'mujer' : '',
     ageMin: age != null ? Math.max(15, age - 5) : null, ageMax: age != null ? age + 5 : null,
@@ -100,8 +129,22 @@ export function tagsFromMember(m = {}) {
 }
 
 /** Texto compacto de un plan base para dárselo a la IA como referencia */
-export function libraryPlanText(entry) {
+export function libraryPlanText(entry, kind = 'diet') {
   const p = entry.plan || {};
+  if (kind === 'routine') {
+    const out = [`RUTINA BASE: ${entry.title}`, `Para: ${entry.description || ''}`, `Etiquetas: ${libraryTags(entry.tags).join(', ')}`, `Nivel: ${p.level || ''} · Días: ${p.days?.length || ''}${p.schedule ? ` · Horario: ${p.schedule}` : ''}`];
+    for (const d of p.days || []) {
+      out.push(`\n== ${d.name} ==${d.warmup ? `\n${d.warmup}` : ''}`);
+      for (const b of d.blocks || []) {
+        out.push(`${b.title ? `[${b.title}] ` : ''}${b.kind}${b.sets ? ` (${b.sets} SERIES)` : ''}${b.note ? ` — ${b.note}` : ''}`);
+        for (const x of b.exercises || []) out.push(`  • ${x.name || EXERCISE_MAP[x.exerciseId]?.name || ''} [exerciseId: ${x.exerciseId || 'custom'}]: ${(x.detail || '').replace(/\n/g, ' / ')}`);
+      }
+      if (d.cardio) out.push(`Cardio: ${d.cardio}`);
+      for (const e of d.extras || []) out.push(`${e.title}: ${(e.items || []).join(' | ')}`);
+    }
+    if (p.notes) out.push('\nIndicaciones: ' + p.notes);
+    return out.join('\n');
+  }
   const out = [`PLAN BASE: ${entry.title}`, `Para: ${entry.description || ''}`, `Etiquetas: ${libraryTags(entry.tags).join(', ')}`];
   if (p.dailyTip?.text) out.push(`Inicia tu día con: ${p.dailyTip.text}`);
   if (p.supplements?.length) out.push('Suplementos: ' + p.supplements.map((s) => `${s.name} (${s.when}; ${s.dose})`).join(' | '));

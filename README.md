@@ -42,6 +42,13 @@ para ajustarlo y publicarlo. “Guardar como plan base” agrega cualquier plan 
 `planLibrary`, solo administradora). La IA recibe los 3 planes base más parecidos (o el que elijas) como punto de
 partida.
 
+### Rutinas base
+Panel → **Planes y plantillas → Planes base → Rutinas de entrenamiento**: 4 rutinas reales de Keila (pierna 3 días +
+superior 2, en casa sin material, 4 días por grupo muscular, pierna/push/pull + hipopresivos). Cada ejercicio está ligado
+a su animación (113 ejercicios en el catálogo), con secciones por músculo, notas de bloque y secciones de texto
+(cardio, hipopresivos, intervalos). En el expediente: **Rutina → Mis rutinas base** (ordenadas por sexo, objetivo,
+nivel, días disponibles y si entrena en casa). La IA recibe las rutinas base más parecidas como punto de partida.
+
 ### Planes con el diseño de Keila
 - **Dieta:** 5 días (Lunes a Viernes) con Almuerzo, Comida, Cena y snacks; foto de cada platillo, tip del día,
   suplementos con su imagen, recomendaciones. **Rutina:** días por grupo muscular con bloques (ejercicio sencillo,

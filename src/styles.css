@@ -579,3 +579,4 @@ button.ex-card { border: 1px solid var(--line); font: inherit; color: inherit; t
 .chip.on { background: var(--wine); border-color: var(--wine); color: #fff; }
 .member-head > .grow { min-width: min(100%, 190px); }
 @media (max-width: 600px) { .member-head .avatar.lg { width: 64px; height: 64px; font-size: 1.3rem; } }
+.rblock-title { font-weight: 800; text-align: center; letter-spacing: 0.06em; color: var(--ink); margin-bottom: 8px; }

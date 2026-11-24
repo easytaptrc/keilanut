@@ -210,21 +210,29 @@ export function RoutineView({ routine: raw, updatedAt }) {
               {d.warmup && <p className="small" style={{ margin: 0 }}>{d.warmup}</p>}
               {d.blocks.map((b, i) => (
                 <div key={i} className="rblock">
-                  <div className="rblock-head"><b>{b.kind}</b><Badge tone="sage" plain>{b.sets} series</Badge></div>
+                  {b.title && <div className="rblock-title">{b.title}</div>}
+                  <div className="rblock-head"><b>{b.kind}</b>{b.sets ? <Badge tone="sage" plain>{b.sets} series</Badge> : null}</div>
                   <div className="grid g2">
                     {b.exercises.map((x, j) => (
                       <button type="button" className="ex-row" key={j} onClick={() => setOpen(x)}>
                         <ExerciseAnim id={x.exerciseId} tag={false} />
                         <div style={{ minWidth: 0, textAlign: 'left' }}>
                           <b style={{ fontSize: '0.92rem' }}>{x.name || EXERCISE_MAP[x.exerciseId]?.name}</b>
-                          {x.detail && <div className="tiny muted" style={{ marginTop: 4 }}>{x.detail}</div>}
+                          {x.detail && <div className="tiny muted" style={{ marginTop: 4, whiteSpace: 'pre-line' }}>{x.detail}</div>}
                         </div>
                       </button>
                     ))}
                   </div>
+                  {b.note && <div className="tiny" style={{ marginTop: 8 }}><b>Nota:</b> {b.note}</div>}
                 </div>
               ))}
               {d.cardio && <div className="notice">❤️ <b>Cardio:</b> {d.cardio}</div>}
+              {(d.extras || []).filter((x) => x.title || x.items?.length).map((x, k) => (
+                <div key={k} className="card flat">
+                  <h4 style={{ margin: '0 0 6px' }}>{x.title}</h4>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>{(x.items || []).filter(Boolean).map((it, n) => <li key={n} className="small" style={{ marginBottom: 4 }}>{it}</li>)}</ul>
+                </div>
+              ))}
             </div>
           )}
         </>

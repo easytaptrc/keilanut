@@ -1,27 +1,44 @@
-// Biblioteca de planes base: explorar, ver y usar los planes de Keila para un paciente.
+// Biblioteca de planes y rutinas base: explorar, ver y usar los planes de Keila para un paciente.
 import { useEffect, useMemo, useState } from 'react';
 import { orderBy } from 'firebase/firestore';
 import { useCol } from '../lib/hooks';
 import { deleteFromLibrary, libraryTags, loadBuiltInLibrary, rankLibrary } from '../lib/library';
 import { foodPhoto } from '../data/planAssets';
+import { exerciseImg } from '../data/exercises';
 import { GOALS, cx } from '../lib/utils';
-import { DietView } from './PlanViews';
+import { DietView, RoutineView } from './PlanViews';
 import { Badge, Empty, Icon, Modal, Spinner, useToast } from './ui';
 
-/** Planes incluidos + guardados por la nutrióloga */
-export function usePlanLibrary() {
+/** Planes incluidos + guardados por la nutrióloga (kind: 'diet' | 'routine') */
+export function usePlanLibrary(kind = 'diet') {
   const [builtIn, setBuiltIn] = useState(null);
   const custom = useCol('planLibrary', () => [orderBy('createdAt', 'desc')], 'planLibrary');
-  useEffect(() => { let on = true; loadBuiltInLibrary().then((l) => on && setBuiltIn(l)).catch(() => on && setBuiltIn([])); return () => { on = false; }; }, []);
-  const list = useMemo(() => [...custom.list.map((x) => ({ ...x, custom: true })), ...(builtIn || [])], [custom.list, builtIn]);
+  useEffect(() => {
+    let on = true;
+    setBuiltIn(null);
+    loadBuiltInLibrary(kind).then((l) => on && setBuiltIn(l)).catch(() => on && setBuiltIn([]));
+    return () => { on = false; };
+  }, [kind]);
+  const list = useMemo(() => [
+    ...custom.list.filter((x) => (x.kind || 'diet') === kind).map((x) => ({ ...x, custom: true })),
+    ...(builtIn || []),
+  ], [custom.list, builtIn, kind]);
   return { list, loading: builtIn === null || custom.loading };
 }
 
-const photosOf = (plan) => [...new Set((plan?.days || []).flatMap((d) => d.meals || []).map((m) => m.photo).filter(Boolean))].slice(0, 5);
+const photosOf = (plan, kind) => (kind === 'routine'
+  ? [...new Set((plan?.days || []).flatMap((d) => d.blocks || []).flatMap((b) => b.exercises || []).map((x) => x.exerciseId).filter(Boolean))].slice(0, 5).map((id) => exerciseImg(id, 0))
+  : [...new Set((plan?.days || []).flatMap((d) => d.meals || []).map((m) => m.photo).filter(Boolean))].slice(0, 5).map(foodPhoto));
 
-export function PlanLibraryBrowser({ member, clinical, onUse }) {
+const FILTERS = {
+  diet: [['todos', 'Todos'], ['mujer', 'Mujer'], ['hombre', 'Hombre'], ['anemia', 'Anemia'], ['tuyos', 'Guardados por ti']],
+  routine: [['todos', 'Todas'], ['mujer', 'Mujer'], ['hombre', 'Hombre'], ['casa', 'En casa'], ['gimnasio', 'Gimnasio'], ['tuyos', 'Guardadas por ti']],
+};
+
+export function PlanLibraryBrowser({ kind = 'diet', member, clinical, onUse }) {
   const toast = useToast();
-  const { list, loading } = usePlanLibrary();
+  const isRoutine = kind === 'routine';
+  const { list, loading } = usePlanLibrary(kind);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('todos');
   const [preview, setPreview] = useState(null);
@@ -29,31 +46,29 @@ export function PlanLibraryBrowser({ member, clinical, onUse }) {
   const ranked = useMemo(() => (member ? rankLibrary(list, member, clinical) : list), [list, member, clinical]);
   const bestId = member && ranked[0]?.match?.score > 0 ? ranked[0].id : null;
   const shown = ranked.filter((e) => {
-    if (filter === 'hombre' || filter === 'mujer') { if (e.tags?.sex !== filter) return false; }
+    const t = e.tags || {};
+    if ((filter === 'hombre' || filter === 'mujer') && t.sex && t.sex !== filter) return false;
     if (filter === 'tuyos' && !e.custom) return false;
-    if (filter === 'anemia' && !(e.tags?.conditions || []).includes('anemia')) return false;
+    if (filter === 'anemia' && !(t.conditions || []).includes('anemia')) return false;
+    if ((filter === 'casa' || filter === 'gimnasio') && t.place !== filter) return false;
     if (!q.trim()) return true;
-    const hay = `${e.title} ${e.description} ${libraryTags(e.tags).join(' ')} ${GOALS[e.tags?.goal] || ''}`.toLowerCase();
+    const hay = `${e.title} ${e.description} ${libraryTags(t).join(' ')} ${GOALS[t.goal] || ''}`.toLowerCase();
     return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
   });
 
   const remove = async (e) => {
     if (!window.confirm(`¿Eliminar “${e.title}” de tu biblioteca?`)) return;
-    try { await deleteFromLibrary(e.id); toast('Plan eliminado de tu biblioteca', 'ok'); } catch (er) { toast(er.message, 'err'); }
+    try { await deleteFromLibrary(e.id); toast('Eliminado de tu biblioteca', 'ok'); } catch (er) { toast(er.message, 'err'); }
   };
 
   if (loading) return <div className="row" style={{ justifyContent: 'center', padding: 30 }}><Spinner /></div>;
   return (
     <div className="stack" style={{ gap: 14 }}>
-      <div className="row" style={{ gap: 10 }}>
-        <input className="input grow" style={{ minWidth: 180 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: déficit, anemia, ayuno, 3 menús…" aria-label="Buscar plan" />
-      </div>
+      <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={isRoutine ? 'Buscar: glúteo, casa, hipopresivos, 4 días…' : 'Buscar: déficit, anemia, ayuno, 3 menús…'} aria-label="Buscar" />
       <div className="lib-filter">
-        {[['todos', 'Todos'], ['mujer', 'Mujer'], ['hombre', 'Hombre'], ['anemia', 'Anemia'], ['tuyos', 'Guardados por ti']].map(([k, l]) => (
-          <button key={k} type="button" className={cx('chip', filter === k && 'on')} onClick={() => setFilter(k)}>{l}</button>
-        ))}
+        {FILTERS[kind].map(([k, l]) => <button key={k} type="button" className={cx('chip', filter === k && 'on')} onClick={() => setFilter(k)}>{l}</button>)}
       </div>
-      {member && bestId && <p className="small muted" style={{ margin: 0 }}>Ordenados según el perfil de <b>{member.firstName}</b> (sexo, edad, peso, objetivo, condiciones y comidas al día).</p>}
+      {member && bestId && <p className="small muted" style={{ margin: 0 }}>Ordenados según el perfil de <b>{member.firstName}</b> ({isRoutine ? 'sexo, objetivo, nivel, días disponibles y lugar' : 'sexo, edad, peso, objetivo, condiciones y comidas al día'}).</p>}
       {!shown.length ? <Empty icon="📚" title="Sin resultados">Prueba con otra búsqueda o filtro.</Empty> : (
         <div className="lib-list">
           {shown.map((e) => (
@@ -63,16 +78,16 @@ export function PlanLibraryBrowser({ member, clinical, onUse }) {
                 {e.id === bestId ? <Badge tone="sage">★ Recomendado</Badge> : e.custom ? <Badge plain>Tuyo</Badge> : null}
               </div>
               {e.description && <p className="tiny muted" style={{ margin: 0 }}>{e.description}</p>}
-              <div className="lib-photos">{photosOf(e.plan).map((p) => <img key={p} src={foodPhoto(p)} alt="" loading="lazy" />)}</div>
+              <div className="lib-photos">{photosOf(e.plan, kind).map((src) => <img key={src} src={src} alt="" loading="lazy" />)}</div>
               <div className="lib-tags">
                 {e.tags?.goal && <Badge tone="sage" plain>{GOALS[e.tags.goal] || e.tags.goal}</Badge>}
                 {libraryTags(e.tags).map((t) => <Badge key={t} plain>{t}</Badge>)}
-                <Badge plain>{e.plan?.days?.length || 0} {e.tags?.format === 'opciones' ? 'opciones' : 'días/menús'}</Badge>
+                {!isRoutine && <Badge plain>{e.plan?.days?.length || 0} {e.tags?.format === 'opciones' ? 'opciones' : 'días/menús'}</Badge>}
               </div>
               {member && e.match?.why?.length > 0 && <div className="tiny" style={{ color: 'var(--sage-dark)' }}>Coincide: {e.match.why.join(' · ')}</div>}
               <div className="lib-actions">
                 <button type="button" className="btn light xs" onClick={() => setPreview(e)}><Icon name="eye" size={14} /> Ver</button>
-                {onUse && <button type="button" className="btn sage xs" onClick={() => onUse(e)}><Icon name="check" size={14} /> Usar este plan</button>}
+                {onUse && <button type="button" className="btn sage xs" onClick={() => onUse(e)}><Icon name="check" size={14} /> {isRoutine ? 'Usar esta rutina' : 'Usar este plan'}</button>}
                 {e.custom && <button type="button" className="btn link xs" style={{ color: 'var(--danger)' }} onClick={() => remove(e)}><Icon name="trash" size={14} /> Eliminar</button>}
               </div>
             </div>
@@ -81,8 +96,8 @@ export function PlanLibraryBrowser({ member, clinical, onUse }) {
       )}
       {preview && (
         <Modal wide title={preview.title} onClose={() => setPreview(null)}
-          footer={<><button className="btn ghost" onClick={() => setPreview(null)}>Cerrar</button>{onUse && <button className="btn sage" onClick={() => { onUse(preview); setPreview(null); }}><Icon name="check" size={16} /> Usar este plan</button>}</>}>
-          <DietView diet={preview.plan} />
+          footer={<><button className="btn ghost" onClick={() => setPreview(null)}>Cerrar</button>{onUse && <button className="btn sage" onClick={() => { onUse(preview); setPreview(null); }}><Icon name="check" size={16} /> {isRoutine ? 'Usar esta rutina' : 'Usar este plan'}</button>}</>}>
+          {isRoutine ? <RoutineView routine={preview.plan} /> : <DietView diet={preview.plan} />}
         </Modal>
       )}
     </div>

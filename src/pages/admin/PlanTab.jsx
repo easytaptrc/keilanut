@@ -36,7 +36,8 @@ export default function PlanTab({ member, kind }) {
   const [ai, setAi] = useState(null); // estado del modal IA
   const [libOpen, setLibOpen] = useState(false);
   const [saveLib, setSaveLib] = useState(null);
-  const library = usePlanLibrary();
+  const library = usePlanLibrary(kind);
+  const baseWord = isDiet ? 'plan base' : 'rutina base';
   const fileRef = useRef();
 
   // Carga inicial: borrador > publicado > vacío
@@ -92,16 +93,16 @@ export default function PlanTab({ member, kind }) {
   const applyBase = (entry) => {
     const hasContent = value?.days?.length;
     if ((dirty || hasContent) && !window.confirm(`Esto reemplazará el contenido actual del editor con “${entry.title}”. ¿Continuar?`)) return;
-    change(planFromLibrary(entry));
+    change(planFromLibrary(entry, kind));
     setLibOpen(false); setMode('edit');
-    toast({ title: 'Plan base cargado', body: 'Ajusta porciones, fechas de check y cambio de plan antes de publicar.', duration: 7000 }, 'ok');
+    toast({ title: isDiet ? 'Plan base cargado' : 'Rutina base cargada', body: isDiet ? 'Ajusta porciones, fechas de check y cambio de plan antes de publicar.' : 'Ajusta pesos, series y ejercicios antes de publicar.', duration: 7000 }, 'ok');
   };
 
   const doSaveLib = async () => {
     if (!saveLib.title.trim()) return toast('Ponle un nombre al plan', 'err');
     setBusy(true);
     try {
-      await saveToLibrary({ title: saveLib.title.trim(), description: saveLib.description.trim(), tags: tagsFromMember(member), plan: value });
+      await saveToLibrary({ kind, title: saveLib.title.trim(), description: saveLib.description.trim(), tags: tagsFromMember(member, kind, value), plan: value });
       setSaveLib(null); toast('Guardado en tu biblioteca de planes base', 'ok');
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
@@ -111,14 +112,11 @@ export default function PlanTab({ member, kind }) {
     try {
       const chosen = templates.filter((t) => ai.selected.includes(t.id));
       const { generateWithAI } = await import('../../lib/ai');
-      let bases = [];
-      if (isDiet) {
-        const ranked = rankLibrary(library.list, member, clinical);
-        bases = ai.base === 'none' ? [] : ai.base && ai.base !== 'auto' ? ranked.filter((e) => e.id === ai.base) : ranked.slice(0, 3);
-      }
+      const ranked = rankLibrary(library.list, member, clinical);
+      const bases = ai.base === 'none' ? [] : ai.base && ai.base !== 'auto' ? ranked.filter((e) => e.id === ai.base) : ranked.slice(0, 3);
       const result = await generateWithAI({
         kind, profile: member, progress, clinical, templates: chosen, instructions: ai.instructions,
-        library: bases.map((e) => ({ title: e.title, description: e.description, text: libraryPlanText(e) })),
+        library: bases.map((e) => ({ title: e.title, description: e.description, text: libraryPlanText(e, kind) })),
         apiKey: settings?.anthropicKey, model: settings?.model, onStatus: (s) => setAi((x) => ({ ...x, status: s })),
       });
       const { rationale, ...plan } = result;
@@ -147,8 +145,8 @@ export default function PlanTab({ member, kind }) {
             </div>
           </div>
           <div className="row">
-            {isDiet && <button className="btn light sm" onClick={() => setLibOpen(true)}><Icon name="file" size={16} /> Mis planes base</button>}
-            {isDiet && !!value.days?.length && <button className="btn light sm" disabled={busy} onClick={() => setSaveLib({ title: value.baseTitle ? `${value.baseTitle} (ajustado)` : value.title || '', description: '' })}><Icon name="plus" size={16} /> Guardar como plan base</button>}
+            <button className="btn light sm" onClick={() => setLibOpen(true)}><Icon name="file" size={16} /> {isDiet ? 'Mis planes base' : 'Mis rutinas base'}</button>
+            {!!value.days?.length && <button className="btn light sm" disabled={busy} onClick={() => setSaveLib({ title: value.baseTitle ? `${value.baseTitle} (ajustado)` : value.title || '', description: '' })}><Icon name="plus" size={16} /> Guardar como {baseWord}</button>}
             <button className="btn light sm" onClick={auto}><Icon name="leaf" size={16} /> Borrador automático</button>
             <button className="btn sage sm" onClick={() => setAi({ selected: templates.slice(0, 3).map((t) => t.id), instructions: '', base: 'auto', running: false })}><Icon name="sparkle" size={16} /> Generar con IA</button>
           </div>
@@ -205,8 +203,8 @@ export default function PlanTab({ member, kind }) {
                 </div>
               )}
             </Field>
-            {isDiet && (
-              <Field label="Plan base de tu biblioteca" hint="La IA parte de tu plan real y lo ajusta a este paciente.">
+            {(
+              <Field label={isDiet ? 'Plan base de tu biblioteca' : 'Rutina base de tu biblioteca'} hint={`La IA parte de tu ${baseWord} real y la ajusta a este paciente.`}>
                 <select className="select" value={ai.base} onChange={(ev) => setAi((x) => ({ ...x, base: ev.target.value }))}>
                   <option value="auto">Automático: los 3 más parecidos a {member.firstName}</option>
                   {rankLibrary(library.list, member, clinical).map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
@@ -223,12 +221,12 @@ export default function PlanTab({ member, kind }) {
         </Modal>
       )}
       {libOpen && (
-        <Modal wide title={<span className="row nowrap"><Icon name="file" /> Mis planes base</span>} onClose={() => setLibOpen(false)}>
-          <PlanLibraryBrowser member={member} clinical={clinical} onUse={applyBase} />
+        <Modal wide title={<span className="row nowrap"><Icon name="file" /> {isDiet ? 'Mis planes base' : 'Mis rutinas base'}</span>} onClose={() => setLibOpen(false)}>
+          <PlanLibraryBrowser kind={kind} member={member} clinical={clinical} onUse={applyBase} />
         </Modal>
       )}
       {saveLib && (
-        <Modal title="Guardar como plan base" onClose={() => !busy && setSaveLib(null)}
+        <Modal title={`Guardar como ${baseWord}`} onClose={() => !busy && setSaveLib(null)}
           footer={<><button className="btn ghost" disabled={busy} onClick={() => setSaveLib(null)}>Cancelar</button><button className="btn sage" disabled={busy} onClick={doSaveLib}>Guardar</button></>}>
           <div className="stack">
             <p className="small muted" style={{ margin: 0 }}>Se guarda una copia de este plan (sin nombre del paciente ni fechas) para reutilizarla con otros pacientes y como referencia de la IA.</p>

@@ -11,6 +11,7 @@ export default function AdminTemplates() {
   const toast = useToast();
   const { list } = useCol('templates', () => [orderBy('createdAt', 'desc')], 'templates');
   const [type, setType] = useState('library');
+  const [libKind, setLibKind] = useState('diet');
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ title: '', purpose: '', goal: '', notes: '', file: null });
   const [busy, setBusy] = useState(false);
@@ -49,8 +50,12 @@ export default function AdminTemplates() {
       </div>
       {type === 'library' ? (
         <>
-          <div className="notice">Tus planes de alimentación listos para usar. En el expediente de cada paciente (pestaña <b>Dieta</b> → <b>Mis planes base</b>) se ordenan según su perfil: eliges uno, lo ajustas y lo publicas. La IA también los usa como referencia de tu estilo y porciones.</div>
-          <PlanLibraryBrowser />
+          <div className="notice">Tus planes de alimentación listos para usar. En el expediente de cada paciente (pestaña <b>Dieta</b> → <b>Mis planes base</b> o <b>Rutina</b> → <b>Mis rutinas base</b>) se ordenan según su perfil: eliges uno, lo ajustas y lo publicas. La IA también los usa como referencia de tu estilo y porciones.</div>
+          <div className="lib-filter">
+            <button type="button" className={cx('chip', libKind === 'diet' && 'on')} onClick={() => setLibKind('diet')}>🥗 Planes de alimentación</button>
+            <button type="button" className={cx('chip', libKind === 'routine' && 'on')} onClick={() => setLibKind('routine')}>🏋️ Rutinas de entrenamiento</button>
+          </div>
+          <PlanLibraryBrowser key={libKind} kind={libKind} />
         </>
       ) : <>
       <div className="notice">

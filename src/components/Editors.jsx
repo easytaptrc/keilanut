@@ -261,6 +261,7 @@ export function RoutineEditor({ value, onChange }) {
           <input className="input sm" value={d.warmup || ''} placeholder="Calentamiento" onChange={(e) => setDayData({ warmup: e.target.value })} />
           {d.blocks.map((b, i) => (
             <div key={i} className="block-edit">
+              <input className="input sm" value={b.title || ''} placeholder="Sección (opcional, ej. HOMBRO, TRÍCEPS, PANTORRILLA (NEUTRO))" onChange={(e) => setBlock(i, { title: e.target.value.toUpperCase() })} />
               <div className="row block-head">
                 <select className="select sm" style={{ flex: '1 1 150px', minWidth: 0 }} value={b.kind} onChange={(e) => setBlock(i, { kind: e.target.value })}>{[...new Set([...BLOCK_KINDS, b.kind])].map((k) => <option key={k}>{k}</option>)}</select>
                 <input className="input sm" style={{ width: 80 }} inputMode="numeric" value={b.sets} onChange={(e) => setBlock(i, { sets: Number(e.target.value) || '' })} aria-label="Series" />
@@ -283,12 +284,23 @@ export function RoutineEditor({ value, onChange }) {
                 );
               })}
               <button type="button" className="btn link xs" style={{ alignSelf: 'flex-start' }} onClick={() => setBlock(i, { exercises: [...b.exercises, { exerciseId: '', name: '', detail: '' }] })}>+ Ejercicio</button>
+              <input className="input sm" value={b.note || ''} placeholder="Nota del bloque (opcional, ej. Descansar 30seg entre cada serie)" onChange={(e) => setBlock(i, { note: e.target.value })} />
             </div>
           ))}
           <div className="row" style={{ gap: 4 }}>
             {BLOCK_KINDS.map((k) => <button type="button" key={k} className="btn link xs" onClick={() => setDayData({ blocks: [...d.blocks, { kind: k, sets: 3, exercises: [{ exerciseId: '', name: '', detail: '' }] }] })}>+ {k}</button>)}
           </div>
           <input className="input sm" value={d.cardio || ''} placeholder="Cardio del día (opcional)" onChange={(e) => setDayData({ cardio: e.target.value })} />
+          {(d.extras || []).map((x, k) => (
+            <div key={k} className="card flat stack" style={{ padding: 10, gap: 6 }}>
+              <div className="row nowrap">
+                <input className="input sm grow" value={x.title || ''} placeholder="Título (ej. CARDIO, HIPOPRESIVOS)" onChange={(e) => setDayData({ extras: d.extras.map((y, n) => (n === k ? { ...y, title: e.target.value.toUpperCase() } : y)) })} />
+                <button type="button" className="btn ghost xs" aria-label="Quitar sección" onClick={() => setDayData({ extras: d.extras.filter((_, n) => n !== k) })}><Icon name="x" size={14} /></button>
+              </div>
+              <textarea className="textarea sm" rows={3} value={lines(x.items)} placeholder="Un renglón por indicación" onChange={(e) => setDayData({ extras: d.extras.map((y, n) => (n === k ? { ...y, items: e.target.value.split('\n') } : y)) })} onBlur={(e) => setDayData({ extras: d.extras.map((y, n) => (n === k ? { ...y, items: unlines(e.target.value) } : y)) })} />
+            </div>
+          ))}
+          <button type="button" className="btn link xs" style={{ alignSelf: 'flex-start' }} onClick={() => setDayData({ extras: [...(d.extras || []), { title: 'CARDIO', items: [] }] })}>+ Sección de texto (cardio, hipopresivos, intervalos…)</button>
         </div>
       )}
       <Field label="Indicaciones generales"><textarea className="textarea" value={v.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>

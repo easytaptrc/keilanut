@@ -440,23 +440,33 @@ function dayColumn(d, day, x, w, dry, size) {
   const top = 290;
   if (!dry) {
     d.roundRect(x + 20, 210, w - 40, 58, 12, hex('#2f2e2c'));
-    d.text(day.name, x + 20, 226, { font: d.bold, size: 26, color: C.white, align: 'center', w: w - 40 });
+    let ns = 26;
+    while (ns > 15 && d.width(day.name, d.bold, ns) > w - 76) ns -= 1;
+    if (d.width(day.name, d.bold, ns) <= w - 76) d.text(day.name, x + 20, 226 + (26 - ns) / 2, { font: d.bold, size: ns, color: C.white, align: 'center', w: w - 40 });
+    else d.para(day.name, x + 38, 217, w - 76, { font: d.bold, size: 15, color: C.white, align: 'center', lh: 1.1 });
   }
   const pad = 22, iw = w - pad * 2;
   const t0 = top + 22;
   if (day.warmup) h += d.para(day.warmup, x + pad, t0 + h, iw, { font: d.reg, size, color: C.dark, align: 'center', dry }) + 14;
+  const lines = (txt, font, ind = 0) => String(txt || '').split('\n').filter((l) => l.trim()).forEach((l) => { h += d.para(l.trim(), x + pad + ind, t0 + h, iw - ind, { font, size, color: C.dark, dry }); });
   for (const b of day.blocks) {
-    h += d.para(`${b.kind} (${b.sets} SERIES)`, x + pad, t0 + h, iw, { font: d.bold, size, color: C.dark, dry }) + 2;
+    if (b.title) { h += 4; h += d.para(b.title, x + pad, t0 + h, iw, { font: d.bold, size: size + 1, color: C.dark, align: 'center', dry }) + 2; }
+    h += d.para(b.sets ? `${b.kind} (${b.sets} SERIES)` : b.kind, x + pad, t0 + h, iw, { font: d.bold, size, color: C.dark, dry }) + 2;
     for (const e of b.exercises) {
       const name = (e.name || EXERCISE_MAP[e.exerciseId]?.name || '').toUpperCase();
       if (!dry) d.text('•', x + pad + 4, t0 + h, { font: d.bold, size, color: C.dark });
       h += d.para(name, x + pad + 18, t0 + h, iw - 18, { font: d.bold, size, color: C.dark, dry });
-      if (e.detail) h += d.para(e.detail, x + pad, t0 + h, iw, { font: d.light, size, color: C.dark, dry });
+      lines(e.detail, d.light);
       h += 4;
     }
+    if (b.note) lines(b.note, d.italic);
     h += 10;
   }
-  if (day.cardio) { h += d.para('CARDIO', x + pad, t0 + h, iw, { font: d.bold, size, color: C.dark, dry }); h += d.para(day.cardio, x + pad, t0 + h, iw, { font: d.light, size, color: C.dark, dry }); }
+  if (day.cardio) { h += d.para('CARDIO', x + pad, t0 + h, iw, { font: d.bold, size, color: C.dark, dry }); lines(day.cardio, d.light); h += 8; }
+  for (const ex of day.extras || []) {
+    if (ex.title) h += d.para(ex.title, x + pad, t0 + h, iw, { font: d.bold, size: size + 1, color: C.dark, dry }) + 2;
+    h += d.bullets((ex.items || []).filter(Boolean), x + pad + 4, t0 + h, iw - 4, { font: d.light, size, color: C.dark, dry }) + 10;
+  }
   return h + 40;
 }
 
