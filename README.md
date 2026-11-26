@@ -16,6 +16,23 @@
 2. **IA (Claude):** panel → Ajustes → pega tu llave de API de Anthropic (console.anthropic.com → API Keys).
 3. **Ajustes:** precios (solo tú los ves), turnos de citas, WhatsApp, Instagram y dirección.
 
+## Ajustes (todo configurable desde el panel)
+Panel → **Ajustes**, por secciones:
+- **Sitio y contacto:** WhatsApp, Instagram, correo, dirección; todos los textos de la página de inicio y de la
+  reservación; sección “Sobre mí” con tu foto (colección pública `siteImages`).
+- **Servicios y precios:** agregar, apagar, ordenar y editar servicios (nombre, descripción, lo que incluye, ícono, foto);
+  precio privado de cada uno.
+- **Horario de citas:** días, turnos, duración, anticipación y días bloqueados.
+- **Preguntas de reservación:** cambiar textos, apagar, hacer obligatoria, ordenar, agregar preguntas (texto, número,
+  fecha, una o varias opciones, Sí/No, Sí/No + ¿cuál?, casilla) y secciones. Las respuestas nuevas se guardan en
+  `extra` de la reservación y del expediente, y la IA las lee.
+- **Historial clínico:** lo mismo para las preguntas de la Consulta y las medidas de la báscula (agregar medidas).
+- **App del paciente:** encender o apagar Dieta, Comidas, Rutina, Progreso, Fotos y Reservar; revisión cada N semanas,
+  días de aviso antes, recordatorios automáticos y mensaje de bienvenida.
+- **Inteligencia artificial:** llave, modelo, días de la dieta, opciones por comida, secciones por platillo y tus
+  propias reglas para la IA.
+- **Cuenta y respaldo:** cambiar contraseña y descargar un respaldo completo de los datos (JSON).
+
 ## Cómo funciona
 
 ### Reservación (público)

@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Brand, ExerciseAnim, Icon, useReveal } from '../components/ui';
-import { SERVICES, waLink } from '../lib/utils';
+import { waLink } from '../lib/utils';
+import { DEFAULT_SERVICES, DEFAULT_SITE, activeServices, usePublicSettings, useSiteImage } from '../lib/config';
 
 export function SiteNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -36,18 +35,24 @@ function Leaf({ style, size = 60 }) {
 }
 
 export function useContact() {
-  const [c, setC] = useState(null);
-  useEffect(() => { getDoc(doc(db, 'settings', 'public')).then((d) => setC(d.data() || {})).catch(() => setC({})); }, []);
-  return c;
+  const p = usePublicSettings();
+  return p ? { ...p.raw, whatsapp: p.whatsapp, instagram: p.instagram, address: p.address, email: p.email } : null;
+}
+
+/** Texto con *palabras* en cursiva */
+function Rich({ text }) {
+  return String(text || '').split(/(\*[^*]+\*)/g).map((t, i) => (t.startsWith('*') && t.endsWith('*') ? <i key={i}>{t.slice(1, -1)}</i> : t));
 }
 
 export function Footer({ contact }) {
+  const p = usePublicSettings();
+  const site = p?.site || DEFAULT_SITE;
   return (
     <footer className="footer">
       <div className="container row between" style={{ alignItems: 'flex-start', gap: 28 }}>
         <div style={{ maxWidth: 320 }}>
           <img src="/logo.png" alt="Keila Guerrero, Lic. Nutrición" style={{ width: 170, marginBottom: 12 }} />
-          <p className="small muted">Nutrición clínica y deportiva con un enfoque humano, realista y basado en evidencia.</p>
+          <p className="small muted">{site.footerText}</p>
         </div>
         <div className="stack small" style={{ gap: 8 }}>
           <b>Navegación</b>
@@ -59,6 +64,7 @@ export function Footer({ contact }) {
           <b>Contacto</b>
           {contact?.whatsapp && <a href={waLink(contact.whatsapp, 'Hola Keila, me gustaría información sobre la consulta.')} target="_blank" rel="noreferrer">WhatsApp</a>}
           {contact?.instagram && <a href={`https://instagram.com/${contact.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">Instagram {contact.instagram}</a>}
+          {contact?.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}
           {contact?.address && <span className="muted">{contact.address}</span>}
           {!contact?.whatsapp && !contact?.instagram && <span className="muted">Reserva tu cita en línea</span>}
         </div>
@@ -68,9 +74,28 @@ export function Footer({ contact }) {
   );
 }
 
+function ServiceCard({ k, s, i }) {
+  const img = useSiteImage(`service-${k}`);
+  return (
+    <div className="card service-card reveal" style={{ transitionDelay: `${i * 0.1}s` }}>
+      {img ? <img className="service-img" src={img} alt={s.label} loading="lazy" /> : <div className="ico"><Icon name={s.icon || 'leaf'} size={26} /></div>}
+      <h3>{s.label}</h3>
+      <p className="muted">{s.desc}</p>
+      {!!s.bullets?.filter(Boolean).length && <ul>{s.bullets.filter(Boolean).map((b) => <li key={b}>{b}</li>)}</ul>}
+      <Link to={`/reservar?servicio=${k}`} className="btn sage" style={{ alignSelf: 'flex-start', marginTop: 'auto' }}>Reservar {(s.short || s.label).toLowerCase()}</Link>
+    </div>
+  );
+}
+
+const TEAM_ICONS = ['apple', 'dumbbell', 'chart', 'bell', 'calendar', 'leaf', 'sparkle', 'check'];
+
 export default function Home() {
   const ref = useReveal();
+  const p = usePublicSettings();
   const contact = useContact();
+  const site = p?.site || DEFAULT_SITE;
+  const services = activeServices(p?.services || DEFAULT_SERVICES);
+  const aboutImg = useSiteImage(site.aboutEnabled ? 'about' : null);
   return (
     <div ref={ref}>
       <SiteNav />
@@ -82,12 +107,12 @@ export default function Home() {
         <Leaf style={{ top: '22%', right: '20%', animationDelay: '-5s' }} size={34} />
         <div className="container" style={{ position: 'relative' }}>
           <img className="mono" src="/monogram.png" alt="Monograma GK" />
-          <div className="eyebrow" style={{ marginBottom: 14, animation: 'pop 1s .1s both' }}>Lic. en Nutrición · Keila Guerrero</div>
-          <h1>Nutrición que se <i>adapta</i> a tu vida</h1>
-          <p className="lead">Planes de alimentación y entrenamiento personalizados, diseñados según tu historia clínica, tu cuerpo y tu objetivo. Sin dietas extremas, con resultados reales.</p>
+          <div className="eyebrow" style={{ marginBottom: 14, animation: 'pop 1s .1s both' }}>{site.heroEyebrow}</div>
+          <h1><Rich text={site.heroTitle} /></h1>
+          <p className="lead">{site.heroLead}</p>
           <div className="cta">
-            <Link to="/reservar" className="btn">Reservar mi cita <Icon name="arrowR" size={18} /></Link>
-            <Link to="/team" className="btn ghost">Soy parte del Team</Link>
+            <Link to="/reservar" className="btn">{site.ctaPrimary} <Icon name="arrowR" size={18} /></Link>
+            <Link to="/team" className="btn ghost">{site.ctaSecondary}</Link>
           </div>
         </div>
         <div className="scroll-hint">Descubre</div>
@@ -96,74 +121,55 @@ export default function Home() {
       <section className="section alt" id="servicios">
         <div className="container">
           <div className="section-head reveal">
-            <div className="eyebrow">Servicios</div>
-            <h2>Elige cómo quieres empezar</h2>
-            <p className="muted">Ambas modalidades incluyen evaluación completa, plan personalizado y acceso a la app Team.</p>
+            <div className="eyebrow">{site.servicesEyebrow}</div>
+            <h2>{site.servicesTitle}</h2>
+            <p className="muted">{site.servicesLead}</p>
           </div>
-          <div className="grid g2">
-            <div className="card service-card reveal">
-              <div className="ico"><Icon name="video" size={26} /></div>
-              <h3>{SERVICES.online.label}</h3>
-              <p className="muted">{SERVICES.online.desc}</p>
-              <ul>
-                <li>Videollamada con evaluación de hábitos e historial</li>
-                <li>Plan de alimentación y rutina en tu app</li>
-                <li>Seguimiento de progreso y notificaciones</li>
-              </ul>
-              <Link to="/reservar?servicio=online" className="btn sage" style={{ alignSelf: 'flex-start' }}>Reservar online</Link>
-            </div>
-            <div className="card service-card reveal" style={{ transitionDelay: '.1s' }}>
-              <div className="ico"><Icon name="pin" size={26} /></div>
-              <h3>{SERVICES.presencial.label}</h3>
-              <p className="muted">{SERVICES.presencial.desc}</p>
-              <ul>
-                <li>Mediciones antropométricas y composición corporal</li>
-                <li>Plan de alimentación y rutina en tu app</li>
-                <li>Seguimiento cercano en cada cita</li>
-              </ul>
-              <Link to="/reservar?servicio=presencial" className="btn sage" style={{ alignSelf: 'flex-start' }}>Reservar presencial</Link>
-            </div>
+          <div className={`grid ${Object.keys(services).length >= 3 ? 'g3' : 'g2'}`}>
+            {Object.entries(services).map(([k, s], i) => <ServiceCard key={k} k={k} s={s} i={i} />)}
           </div>
         </div>
       </section>
 
-      <section className="section">
+      {site.aboutEnabled && (
+        <section className="section" id="sobre-mi">
+          <div className="container grid g2 about" style={{ alignItems: 'center', gap: 40 }}>
+            {aboutImg && <div className="reveal"><img className="about-img" src={aboutImg} alt={site.aboutTitle} /></div>}
+            <div className="reveal" style={{ transitionDelay: '.1s' }}>
+              <div className="eyebrow">{site.aboutEyebrow}</div>
+              <h2>{site.aboutTitle}</h2>
+              {String(site.aboutText || '').split(/\n{2,}/).map((t, i) => <p key={i} className="muted" style={{ whiteSpace: 'pre-line' }}>{t}</p>)}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className={`section ${site.aboutEnabled ? 'alt' : ''}`}>
         <div className="container">
           <div className="section-head reveal">
-            <div className="eyebrow">Proceso</div>
-            <h2>Así trabajamos juntas</h2>
+            <div className="eyebrow">{site.processEyebrow}</div>
+            <h2>{site.processTitle}</h2>
           </div>
-          <div className="grid g4 steps">
-            {[
-              ['Reserva', 'Llena tu registro con tu historial clínico, hábitos y objetivo.'],
-              ['Evaluación', 'Keila revisa tu caso y confirma tu cita online o presencial.'],
-              ['Tu plan', 'Recibes tu dieta y rutina personalizadas dentro de tu app Team.'],
-              ['Seguimiento', 'Registra tu progreso y recibe avisos y ajustes a tu plan.'],
-            ].map(([t, d], i) => (
-              <div className="step reveal" key={t} style={{ transitionDelay: `${i * 0.08}s` }}>
-                <div className="n">0{i + 1}</div>
-                <div><h4>{t}</h4><p className="small muted">{d}</p></div>
+          <div className={`grid ${site.steps.length === 3 ? 'g3' : 'g4'} steps`}>
+            {site.steps.filter((s) => s.title || s.text).map((s, i) => (
+              <div className="step reveal" key={i} style={{ transitionDelay: `${i * 0.08}s` }}>
+                <div className="n">{String(i + 1).padStart(2, '0')}</div>
+                <div><h4>{s.title}</h4><p className="small muted">{s.text}</p></div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="section alt" id="team">
+      <section className={`section ${site.aboutEnabled ? '' : 'alt'}`} id="team">
         <div className="container grid g2" style={{ alignItems: 'center', gap: 40 }}>
           <div className="reveal">
-            <div className="eyebrow">App Team</div>
-            <h2>Tu plan completo, en tu bolsillo</h2>
-            <p className="muted">Al formar parte del Team recibes tu ID de acceso. Instala la app en tu teléfono y lleva todo contigo:</p>
+            <div className="eyebrow">{site.teamEyebrow}</div>
+            <h2>{site.teamTitle}</h2>
+            <p className="muted">{site.teamLead}</p>
             <div className="stack" style={{ gap: 12, marginTop: 18 }}>
-              {[
-                ['apple', 'Tu dieta con porciones, horarios y recomendaciones'],
-                ['dumbbell', 'Tu rutina con animaciones de cada ejercicio'],
-                ['chart', 'Tu progreso: peso y medidas en gráficas'],
-                ['bell', 'Notificaciones directas de Keila'],
-                ['calendar', 'Agenda tu siguiente cita en un toque'],
-              ].map(([ic, t]) => (
-                <div className="row nowrap" key={t}><span className="avatar" style={{ width: 38, height: 38 }}><Icon name={ic} size={18} /></span><span>{t}</span></div>
+              {site.teamItems.filter(Boolean).map((t, i) => (
+                <div className="row nowrap" key={i}><span className="avatar" style={{ width: 38, height: 38 }}><Icon name={TEAM_ICONS[i % TEAM_ICONS.length]} size={18} /></span><span>{t}</span></div>
               ))}
             </div>
             <div className="row mt2">
@@ -180,15 +186,17 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section">
-        <div className="container reveal">
-          <p className="quote">“No se trata de comer menos, se trata de comer mejor y sostenerlo en el tiempo.”</p>
-          <p className="center eyebrow mt">Keila Guerrero</p>
-          <div className="row mt2" style={{ justifyContent: 'center' }}>
-            <Link to="/reservar" className="btn sage">Agenda tu primera cita</Link>
+      {site.quote && (
+        <section className="section">
+          <div className="container reveal">
+            <p className="quote">“{site.quote}”</p>
+            {site.quoteAuthor && <p className="center eyebrow mt">{site.quoteAuthor}</p>}
+            <div className="row mt2" style={{ justifyContent: 'center' }}>
+              <Link to="/reservar" className="btn sage">{site.quoteCta || 'Reservar'}</Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
       <Footer contact={contact} />
     </div>
   );

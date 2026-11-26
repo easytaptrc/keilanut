@@ -107,6 +107,9 @@
     "hub": {
       "port": 4410
     },
+    "functions": {
+      "port": 5099
+    },
     "logging": {
       "port": 4510
     },

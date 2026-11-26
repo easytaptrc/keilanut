@@ -2,17 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useDoc } from '../../lib/hooks';
-import { BODY_FIELDS, CLINICAL_SECTIONS } from '../../data/clinical';
+import { activeBodyFields, activeClinicalSections, mergeClinicalForm, usePublicSettings } from '../../lib/config';
 import { ACTIVITY, CLINICAL_GOAL_KEY, GOALS, ageFrom, bmi, bmiLabel, cx, fmtDate, todayISO } from '../../lib/utils';
 import { addDays } from '../../lib/admin';
 import { Choice, Field, Icon, Spinner, useToast } from '../../components/ui';
 import ProgressPhotos from '../../components/ProgressPhotos';
 
-const STEPS = [{ key: 'perfil', title: 'Perfil' }, { key: 'bascula', title: 'Báscula y medidas' }, ...CLINICAL_SECTIONS.map((s) => ({ key: s.key, title: s.title }))];
 const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return v === '' || v == null || Number.isNaN(n) ? null : n; };
 
 function ClinicalField({ f, value, other, onChange, onOther }) {
-  const opts = Object.fromEntries((f.options || []).map((o) => [o, o]));
+  const opts = Object.fromEntries((f.options || []).map((o) => (typeof o === 'string' ? [o, o] : [o.value, o.label])));
   const showOther = f.other && (f.type === 'multi' ? true : value === 'Otro' || value === 'Otros');
   return (
     <div className="field">
@@ -21,11 +20,12 @@ function ClinicalField({ f, value, other, onChange, onOther }) {
       {f.type === 'multi' && <Choice multi options={opts} value={value || []} onChange={onChange} />}
       {f.type === 'single' && (
         <div className="checks">
-          {f.options.map((o) => <button type="button" key={o} className={cx('opt', value === o && 'on')} onClick={() => onChange(value === o ? '' : o)}>{o}</button>)}
+          {Object.entries(opts).map(([o, l]) => <button type="button" key={o} className={cx('opt', value === o && 'on')} onClick={() => onChange(value === o ? '' : o)}>{l}</button>)}
         </div>
       )}
       {f.type === 'text' && <input className="input" value={value || ''} onChange={(e) => onChange(e.target.value)} maxLength={500} />}
       {f.type === 'area' && <textarea className="textarea" value={value || ''} onChange={(e) => onChange(e.target.value)} maxLength={4000} />}
+      {f.type === 'number' && <input className="input" inputMode="decimal" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 260 }} />}
       {f.type === 'date' && <input className="input" type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 260 }} />}
       {showOther && <input className="input" value={other || ''} onChange={(e) => onOther(e.target.value)} placeholder="Otros: especifica" maxLength={300} />}
     </div>
@@ -35,6 +35,13 @@ function ClinicalField({ f, value, other, onChange, onOther }) {
 export default function ConsultWizard({ member, onDone }) {
   const toast = useToast();
   const hist = useDoc(`members/${member.id}/clinical/history`);
+  const adm = useDoc('settings/admin');
+  const pub = usePublicSettings();
+  const reviewWeeks = pub?.team?.reviewWeeks || 3;
+  const form = useMemo(() => mergeClinicalForm(adm.data?.clinicalForm), [adm.data]);
+  const SECTIONS = useMemo(() => activeClinicalSections(form), [form]);
+  const BODY_FIELDS = useMemo(() => activeBodyFields(form), [form]);
+  const STEPS = useMemo(() => [{ key: 'perfil', title: 'Perfil' }, { key: 'bascula', title: 'Báscula y medidas' }, ...SECTIONS.map((s) => ({ key: s.key, title: s.title }))], [SECTIONS]);
   const [step, setStep] = useState(0);
   const [data, setData] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -42,9 +49,9 @@ export default function ConsultWizard({ member, onDone }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (data || hist.loading) return;
+    if (data || hist.loading || adm.loading) return;
     const h = hist.data || {};
-    setData(Object.fromEntries(CLINICAL_SECTIONS.map((s) => [s.key, h[s.key] || {}])));
+    setData(Object.fromEntries(form.sections.map((s) => [s.key, h[s.key] || {}])));
     setBody({ date: todayISO(), heightCm: member.heightCm || '', weightKg: member.weightKg || '', ...(h.body || {}) });
     setProfile({
       firstName: member.firstName || '', lastName: member.lastName || '', birthDate: member.birthDate || '', sex: member.sex || '',
@@ -52,14 +59,14 @@ export default function ConsultWizard({ member, onDone }) {
       goalWeight: member.goalWeight || '', activityLevel: member.activityLevel || '',
       diseases: member.diseases || '', medications: member.medications || '', allergies: member.allergies || '', injuries: member.injuries || '',
     });
-  }, [hist.loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hist.loading, adm.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const b = useMemo(() => body && bmi(body.weightKg, body.heightCm), [body]);
   if (!data || !profile || !body) return <div className="skeleton" style={{ height: 300 }} />;
 
-  const cur = STEPS[step];
-  const section = CLINICAL_SECTIONS.find((s) => s.key === cur.key);
-  const setVal = (k, v) => setData((d) => ({ ...d, [cur.key]: { ...d[cur.key], [k]: v } }));
+  const cur = STEPS[Math.min(step, STEPS.length - 1)];
+  const section = SECTIONS.find((s) => s.key === cur.key);
+  const setVal = (k, v) => setData((d) => ({ ...d, [cur.key]: { ...(d[cur.key] || {}), [k]: v } }));
   const setP = (k) => (e) => setProfile((p) => ({ ...p, [k]: e?.target ? e.target.value : e }));
   const setB = (k) => (e) => setBody((x) => ({ ...x, [k]: e.target.value }));
 
@@ -69,15 +76,18 @@ export default function ConsultWizard({ member, onDone }) {
     } else if (cur.key === 'bascula') {
       const clean = { date: body.date || todayISO() };
       for (const f of BODY_FIELDS) clean[f.key] = num(body[f.key]);
+      for (const k of ['weightKg', 'heightCm']) if (!(k in clean)) clean[k] = num(body[k]);
       clean.bmi = bmi(clean.weightKg, clean.heightCm);
-      await setDoc(doc(db, 'members', member.id, 'clinical', 'history'), { body: clean, updatedAt: serverTimestamp() }, { merge: true });
+      const bodyLabels = Object.fromEntries(BODY_FIELDS.map((f) => [f.key, `${f.label}${f.unit ? `|${f.unit}` : ''}`]));
+      await setDoc(doc(db, 'members', member.id, 'clinical', 'history'), { body: clean, _bodyLabels: bodyLabels, updatedAt: serverTimestamp() }, { merge: true });
       // Se guarda también como registro de progreso de esa fecha
       await setDoc(doc(db, 'members', member.id, 'progress', `consulta-${clean.date}`), { ...clean, notes: 'Medición en consulta', by: 'admin', createdAt: serverTimestamp() }, { merge: true });
       const patch = {};
       for (const k of ['weightKg', 'heightCm']) if (clean[k] != null) patch[k] = clean[k];
       if (Object.keys(patch).length) await updateDoc(doc(db, 'members', member.id), patch);
     } else {
-      await setDoc(doc(db, 'members', member.id, 'clinical', 'history'), { [cur.key]: data[cur.key], updatedAt: serverTimestamp() }, { merge: true });
+      const labels = { title: section.title, fields: Object.fromEntries(section.fields.map((f) => [f.key, f.label])) };
+      await setDoc(doc(db, 'members', member.id, 'clinical', 'history'), { [cur.key]: data[cur.key] || {}, _labels: { [cur.key]: labels }, updatedAt: serverTimestamp() }, { merge: true });
     }
   }
 
@@ -91,10 +101,16 @@ export default function ConsultWizard({ member, onDone }) {
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   }
 
+  // Al saltar a otro paso también se guarda lo capturado
+  async function goTo(i) {
+    setBusy(true);
+    try { await saveStep(); setStep(i); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  }
+
   async function finish() {
     const ac = data.acuerdos || {}, nu = data.nutricion || {}, ob = data.objetivos || {}, act = data.actividad || {};
     const consultDate = ac.consultDate || body.date || todayISO();
-    const patch = { lastVisit: consultDate, nextReview: ac.nextReview || addDays(consultDate, 21), clinicalStatus: ac.status || 'Completada' };
+    const patch = { lastVisit: consultDate, nextReview: ac.nextReview || addDays(consultDate, reviewWeeks * 7), clinicalStatus: ac.status || 'Completada' };
     if (ob.goal && CLINICAL_GOAL_KEY[ob.goal]) patch.goal = CLINICAL_GOAL_KEY[ob.goal];
     if (nu.mealsPerDay) patch.mealsPerDay = nu.mealsPerDay;
     if (act.days) patch.trainingDays = { '0 a 1': '2', '2 a 3': '3', '4 a 5': '5', '6 a 7': '6' }[act.days];
@@ -110,7 +126,7 @@ export default function ConsultWizard({ member, onDone }) {
     <div className="stack" style={{ gap: 16 }}>
       <div className="wizard-steps" role="tablist">
         {STEPS.map((s, i) => (
-          <button key={s.key} type="button" className={cx('wstep', i === step && 'on', i < step && 'done')} onClick={() => !busy && setStep(i)}>
+          <button key={s.key} type="button" className={cx('wstep', i === step && 'on', i < step && 'done')} onClick={() => !busy && i !== step && goTo(i)}>
             <span>{i + 1}</span>{s.title}
           </button>
         ))}
@@ -158,8 +174,9 @@ export default function ConsultWizard({ member, onDone }) {
 
         {section && (
           <div className="stack" style={{ gap: 18 }}>
-            {section.fields.filter((f) => !f.showIf || data[cur.key][f.showIf[0]] === f.showIf[1]).map((f) => (
-              <ClinicalField key={f.key} f={f} value={data[cur.key][f.key]} other={data[cur.key][f.key + 'Other']}
+            {!section.fields.length && <p className="small muted">Esta sección no tiene preguntas activas. Puedes agregarlas en Ajustes → Historial clínico.</p>}
+            {section.fields.filter((f) => !f.showIf || (data[cur.key] || {})[f.showIf[0]] === f.showIf[1]).map((f) => (
+              <ClinicalField key={f.key} f={f} value={(data[cur.key] || {})[f.key]} other={(data[cur.key] || {})[f.key + 'Other']}
                 onChange={(v) => setVal(f.key, v)} onOther={(v) => setVal(f.key + 'Other', v)} />
             ))}
           </div>

@@ -1,15 +1,18 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { deleteDoc, doc, orderBy, serverTimestamp, updateDoc, where, getDocs, query, collection, limit } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, orderBy, serverTimestamp, updateDoc, where, getDocs, query, collection, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useCol, useDoc } from '../../lib/hooks';
 import { Badge, Empty, Field, Icon, Modal, useToast } from '../../components/ui';
-import { ACTIVITY, BOOKING_STATUS, GOALS, SERVICES, ageFrom, bmi, bmiLabel, cx, fmtDate, fmtDateTime, fullName, money, waLink } from '../../lib/utils';
+import { ACTIVITY, BOOKING_STATUS, GOALS, ageFrom, bmi, bmiLabel, cx, fmtDate, fmtDateTime, fullName, money, waLink } from '../../lib/utils';
+import { serviceName, usePublicSettings, useServices } from '../../lib/config';
 import { addDays, createMemberFromBooking, mergeBookingAdmin, notifyMember, saveBookingAdmin } from '../../lib/admin';
+import { normalizeBooking } from '../../components/BookingForm';
 
 export function ClinicalSheet({ p }) {
   const age = ageFrom(p.birthDate);
   const b = bmi(p.weightKg, p.heightCm);
+  const extra = [...new Map([...(p.extra || []), ...(p.bookingExtra || [])].filter((x) => x?.label && x?.value).map((x) => [String(x.label), x])).values()];
   const yn = (flag, v) => (flag === "si" ? `Sí — ${v || "sin detalle"}` : flag === "no" ? "No" : v);
   const groups = [
     ["Datos personales", [
@@ -27,13 +30,15 @@ export function ClinicalSheet({ p }) {
       ["Enfermedad o diagnóstico", yn(p.hasDisease, p.diseases) || "No indicado"], ["Medicamentos", yn(p.takesMeds, p.medications)],
       ["Alergias / intolerancias", yn(p.hasAllergy, p.allergies)], ["Lesiones o condiciones", yn(p.hasInjury, p.injuries)], ["Comentarios", p.notes],
     ]],
+
+    ...(extra.length ? [["Preguntas adicionales", extra.map((x) => [x.label, x.value])]] : []),
   ];
   return (
     <div className="grid g2">
       {groups.map(([t, rows]) => (
         <div key={t} className="card flat" style={{ padding: 16 }}>
           <h4>{t}</h4>
-          <dl className="kv">{rows.filter(([, v]) => v).map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{String(v)}</dd></Fragment>)}</dl>
+          <dl className="kv">{rows.filter(([, v]) => v && typeof v !== 'object').map(([k, v], i) => <Fragment key={String(k) + i}><dt>{String(k)}</dt><dd>{String(v)}</dd></Fragment>)}</dl>
         </div>
       ))}
     </div>
@@ -59,6 +64,9 @@ export function CredentialsCard({ cred, phone, name }) {
 }
 
 function BookingDetail({ b, prices, onClose }) {
+  const pubCfg = usePublicSettings();
+  const reviewWeeks = pubCfg?.team?.reviewWeeks || 3;
+  const services = useServices();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [cred, setCred] = useState(null);
@@ -79,14 +87,22 @@ function BookingDetail({ b, prices, onClose }) {
   };
 
   const acceptNew = () => run(async () => {
-    const c = await createMemberFromBooking({ ...b, price: price === '' ? null : Number(price) }, prices[b.service]);
+    const c = await createMemberFromBooking({ ...b, price: price === '' ? null : Number(price) }, prices[b.service], reviewWeeks);
     setCred(c);
   }, 'Reservación aceptada y acceso creado');
 
   const acceptExisting = (memberId) => run(async () => {
     await updateDoc(doc(db, 'bookings', b.id), { status: 'aceptada', memberId, acceptedAt: serverTimestamp() });
     await saveBookingAdmin(b, { price: price === '' ? null : Number(price) });
-    await updateDoc(doc(db, 'members', memberId), { lastVisit: b.date, nextReview: addDays(b.date, 21), active: true });
+    const patch = { lastVisit: b.date, nextReview: addDays(b.date, reviewWeeks * 7), active: true };
+    // Respuestas a preguntas personalizadas de esta reservación: se guardan en el expediente (las más recientes primero)
+    const fresh = normalizeBooking({ extra: b.extra || [] }).extra || [];
+    if (fresh.length) {
+      const m = await getDoc(doc(db, 'members', memberId));
+      const prev = m.data()?.bookingExtra || [];
+      patch.bookingExtra = [...fresh.map((x) => ({ ...x, date: b.date })), ...prev.filter((x) => !fresh.some((y) => y.label === x.label))].slice(0, 60);
+    }
+    await updateDoc(doc(db, 'members', memberId), patch);
     await notifyMember(memberId, { title: 'Cita confirmada', body: `Tu cita del ${fmtDate(b.date, { weekday: 'long', day: 'numeric', month: 'long' })} a las ${b.time} está confirmada.`, type: 'booking' });
     onClose();
   }, 'Reservación aceptada');
@@ -129,7 +145,7 @@ function BookingDetail({ b, prices, onClose }) {
         <div className="stack" style={{ gap: 18 }}>
           <div className="row">
             <Badge tone={BOOKING_STATUS[b.status]?.tone}>{BOOKING_STATUS[b.status]?.label}</Badge>
-            <Badge tone="sage" plain>{SERVICES[b.service]?.label}</Badge>
+            <Badge tone="sage" plain>{serviceName(services, b)}</Badge>
             <Badge plain>{fmtDate(b.date, { weekday: 'long', day: 'numeric', month: 'long' })} · {b.time}</Badge>
             {b.memberId && <Link to={`/admin/team/${b.memberId}`} className="badge info plain" onClick={onClose}>Team {b.memberId}</Link>}
             <span className="tiny muted">Recibida {fmtDateTime(b.createdAt)}</span>
@@ -154,6 +170,7 @@ function BookingDetail({ b, prices, onClose }) {
 const FILTERS = { pendiente: 'Pendientes', aceptada: 'Aceptadas', completada: 'Completadas', rechazada: 'Rechazadas', todas: 'Todas' };
 
 export default function AdminBookings() {
+  const services = useServices();
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState('pendiente');
   const [q, setQ] = useState('');
@@ -195,7 +212,7 @@ export default function AdminBookings() {
                 <div className="avatar">{(b.firstName || '?')[0]}{(b.lastName || '')[0]}</div>
                 <div className="grow">
                   <b>{fullName(b)}</b> {b.memberId ? <Badge tone="sage" plain>{b.memberId}</Badge> : <Badge tone="warn" plain>Nuevo</Badge>}
-                  <div className="tiny muted">{SERVICES[b.service]?.short} · {fmtDate(b.date, { weekday: 'short', day: 'numeric', month: 'short' })} · {b.time}{b.birthDate ? ` · ${ageFrom(b.birthDate)} años` : ''}{b.weightKg ? ` · ${b.weightKg} kg` : ''}</div>
+                  <div className="tiny muted">{serviceName(services, b, true)} · {fmtDate(b.date, { weekday: 'short', day: 'numeric', month: 'short' })} · {b.time}{b.birthDate ? ` · ${ageFrom(b.birthDate)} años` : ''}{b.weightKg ? ` · ${b.weightKg} kg` : ''}</div>
                 </div>
                 <div className="hide-sm small muted">{money(b.price ?? prices[b.service] ?? 0)}</div>
                 <Badge tone={BOOKING_STATUS[b.status]?.tone}>{BOOKING_STATUS[b.status]?.label}</Badge>

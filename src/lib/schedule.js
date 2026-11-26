@@ -71,7 +71,7 @@ export function slotsFor(iso, schedule) {
   if (iso === todayISO()) {
     const now = new Date();
     const limit = now.getHours() * 60 + now.getMinutes() + (Number(s.minNoticeHours) || 0) * 60;
-    return out.filter((t) => toMin(t) >= limit);
+    return [...new Set(out.filter((t) => toMin(t) >= limit))];
   }
   return [...new Set(out)];
 }

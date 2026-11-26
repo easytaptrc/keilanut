@@ -41,6 +41,11 @@ const P = {
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   fork: 'M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1-3 4-3 7 0 2 1 3 3 3',
   share: 'M12 3v12M7 8l5-5 5 5M5 13v7h14v-7',
+  arrowUp: 'M12 19V5M6 11l6-6 6 6',
+  arrowDown: 'M12 5v14M6 13l6 6 6-6',
+  image: 'M4 5h16v14H4zM4 15l4-4 5 5 3-3 4 4M15.5 9.5a1 1 0 1 0 0-.01',
+  list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
 };
 
 export function Icon({ name, size = 20, stroke = 1.6, className, style }) {
@@ -247,12 +252,16 @@ export function useReveal() {
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
-    const els = root.querySelectorAll('.reveal');
+    const seen = new WeakSet();
     const io = new IntersectionObserver((entries) => entries.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
     }), { threshold: 0.12 });
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    // Observa también los elementos que aparecen después (contenido que llega de Ajustes)
+    const scan = () => root.querySelectorAll('.reveal:not(.in)').forEach((el) => { if (!seen.has(el)) { seen.add(el); io.observe(el); } });
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
   }, []);
   return ref;
 }

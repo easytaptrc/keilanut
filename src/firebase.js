@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
 const host = typeof location !== 'undefined' ? location.hostname : '';
 // En producción usamos el mismo dominio como authDomain para que el login con Google
@@ -23,10 +24,12 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 // Pruebas locales: VITE_EMULATORS=1 npm run dev (usa los emuladores de Firebase, no la base real)
+export const functions = getFunctions(app, 'us-central1');
 export const USE_EMULATORS = import.meta.env.VITE_EMULATORS === '1';
 if (USE_EMULATORS) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9399', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8381);
+  connectFunctionsEmulator(functions, '127.0.0.1', 5099);
 }
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

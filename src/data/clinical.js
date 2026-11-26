@@ -137,21 +137,29 @@ export const BODY_FIELDS = [
   { key: 'calfCm', label: 'Pantorrilla', unit: 'cm' },
 ];
 
-/** Texto legible de todo el historial para la IA. */
-export function clinicalText(c) {
+/** Texto legible de todo el historial para la IA (incluye preguntas personalizadas guardadas con su etiqueta). */
+export function clinicalText(c, sections = CLINICAL_SECTIONS) {
   if (!c) return '';
+  const labels = c._labels || {};
+  const known = new Set(sections.map((s) => s.key));
+  const extra = Object.keys(c).filter((k) => !known.has(k) && !k.startsWith('_') && k !== 'body' && k !== 'updatedAt'
+    && c[k] && typeof c[k] === 'object' && !Array.isArray(c[k]) && typeof c[k].toDate !== 'function');
+  const all = [...sections, ...extra.map((k) => ({ key: k, title: labels[k]?.title || k, fields: [] }))];
   const lines = [];
-  for (const s of CLINICAL_SECTIONS) {
+  for (const s of all) {
     const data = c[s.key] || {};
+    const order = [...s.fields.map((f) => f.key), ...Object.keys(data).filter((k) => !k.endsWith('Other') && !s.fields.some((f) => f.key === k))];
     const parts = [];
-    for (const f of s.fields) {
-      let v = data[f.key];
+    for (const key of order) {
+      const f = s.fields.find((x) => x.key === key);
+      let v = data[key];
       if (Array.isArray(v)) v = v.join(', ');
-      const other = data[f.key + 'Other'];
+      const other = data[key + 'Other'];
       if (other) v = [v, `Otro: ${other}`].filter(Boolean).join(', ');
-      if (v != null && String(v).trim()) parts.push(`- ${f.label}: ${String(v).trim()}`);
+      const label = f?.label || labels[s.key]?.fields?.[key] || key;
+      if (v != null && String(v).trim()) parts.push(`- ${label}: ${String(v).trim()}`);
     }
-    if (parts.length) lines.push(`${s.title.toUpperCase()}\n${parts.join('\n')}`);
+    if (parts.length) lines.push(`${(labels[s.key]?.title || s.title).toUpperCase()}\n${parts.join('\n')}`);
   }
   return lines.join('\n\n');
 }

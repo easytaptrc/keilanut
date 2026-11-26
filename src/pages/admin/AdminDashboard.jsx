@@ -5,9 +5,11 @@ import { mergeBookingAdmin } from '../../lib/admin';
 import { useCol, useDoc } from '../../lib/hooks';
 import { Badge, Empty, Icon } from '../../components/ui';
 import PushCard from '../../components/PushCard';
-import { BOOKING_STATUS, SERVICES, fmtDate, fullName, money, todayISO } from '../../lib/utils';
+import { serviceName, useServices } from '../../lib/config';
+import { BOOKING_STATUS, fmtDate, fullName, money, todayISO } from '../../lib/utils';
 
 export default function AdminDashboard() {
+  const services = useServices();
   const { user } = useSession();
   const rawB = useCol('bookings', () => [orderBy('date', 'desc')], 'all-bookings');
   const priv = useCol('bookingAdmin', null, 'booking-admin-private').list;
@@ -75,7 +77,7 @@ export default function AdminDashboard() {
             <div className="list">
               {pending.slice(0, 6).map((b) => (
                 <Link key={b.id} to={`/admin/reservaciones?id=${b.id}`} className="list-item" style={{ textDecoration: 'none' }}>
-                  <div className="grow"><b className="small">{fullName(b)}</b><div className="tiny muted">{SERVICES[b.service]?.short} · {fmtDate(b.date)} · {b.time}</div></div>
+                  <div className="grow"><b className="small">{fullName(b)}</b><div className="tiny muted">{serviceName(services, b, true)} · {fmtDate(b.date)} · {b.time}</div></div>
                   <Badge tone={b.memberId ? 'sage' : 'warn'}>{b.memberId ? 'Team' : 'Nuevo'}</Badge>
                 </Link>
               ))}
@@ -91,7 +93,7 @@ export default function AdminDashboard() {
                   <div className="avatar" style={{ borderRadius: 12, flexDirection: 'column', lineHeight: 1, fontSize: '0.8rem' }}>
                     <span>{new Date(b.date + 'T00:00').getDate()}</span><span className="tiny">{fmtDate(b.date, { month: 'short' })}</span>
                   </div>
-                  <div className="grow"><b className="small">{fullName(b)}</b><div className="tiny muted">{b.time} · {SERVICES[b.service]?.short}</div></div>
+                  <div className="grow"><b className="small">{fullName(b)}</b><div className="tiny muted">{b.time} · {serviceName(services, b, true)}</div></div>
                   <Badge tone={BOOKING_STATUS[b.status].tone}>{b.date === today ? 'Hoy' : BOOKING_STATUS[b.status].label}</Badge>
                 </Link>
               ))}

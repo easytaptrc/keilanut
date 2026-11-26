@@ -116,8 +116,9 @@ export default function PlanTab({ member, kind }) {
       const bases = ai.base === 'none' ? [] : ai.base && ai.base !== 'auto' ? ranked.filter((e) => e.id === ai.base) : ranked.slice(0, 3);
       const result = await generateWithAI({
         kind, profile: member, progress, clinical, templates: chosen, instructions: ai.instructions,
-        library: bases.map((e) => ({ title: e.title, description: e.description, text: libraryPlanText(e, kind) })),
-        apiKey: settings?.anthropicKey, model: settings?.model, onStatus: (s) => setAi((x) => ({ ...x, status: s })),
+        library: bases.map((e) => ({ title: e.title, description: e.description, format: e.tags?.format, text: libraryPlanText(e, kind) })),
+        aiConfig: settings?.ai || {},
+        model: settings?.model, onStatus: (s) => setAi((x) => ({ ...x, status: s })),
       });
       const { rationale, ...plan } = result;
       change(plan);
@@ -187,7 +188,7 @@ export default function PlanTab({ member, kind }) {
         <Modal title={<span className="row nowrap"><Icon name="sparkle" /> Generar {label} con IA</span>} onClose={() => !ai.running && setAi(null)}
           footer={<><button className="btn ghost" disabled={ai.running} onClick={() => setAi(null)}>Cancelar</button><button className="btn sage" disabled={ai.running} onClick={runAI}>{ai.running ? <><Spinner /> {ai.status}</> : 'Generar borrador'}</button></>}>
           <div className="stack">
-            {!settings?.anthropicKey && <div className="error">Primero agrega tu llave de API de Claude en <b>Ajustes</b>.</div>}
+            {!(settings?.aiKeySet || settings?.anthropicKey) && <div className="error">Primero agrega tu llave de API de Claude en <b>Ajustes</b>.</div>}
             <p className="small muted" style={{ margin: 0 }}>La IA leerá el expediente completo de {member.firstName} (peso, estatura, historial clínico, alergias, objetivo, horarios y progreso) y las plantillas que elijas, y armará un borrador con tu estilo. Tú lo revisas antes de publicar.</p>
             <Field label={`Plantillas de ${label} a usar como base`}>
               {!templates.length ? <div className="notice small">Aún no tienes plantillas de {label}. Súbelas en <b>Plantillas IA</b> (PDF + para qué sirve). Sin plantillas, la IA usará criterios generales.</div> : (

@@ -53,12 +53,12 @@ export function matchScore(entry, member = {}, clinical = null) {
     const lo = t.ageMin ?? 0, hi = t.ageMax ?? 120;
     if (age >= lo && age <= hi) { score += 2; why.push(`${age} años`); } else if (age >= lo - 5 && age <= hi + 5) score += 1; else score -= 1;
   }
-  const w = Number(member.weightKg) || Number(clinical?.body?.weight) || null;
+  const w = Number(member.weightKg) || Number(clinical?.body?.weightKg) || null;
   if (w && (t.weightMin != null || t.weightMax != null)) {
     const lo = t.weightMin ?? 0, hi = t.weightMax ?? 400;
     if (w >= lo && w <= hi) { score += 2; why.push(`${w} kg`); } else if (w >= lo - 10 && w <= hi + 10) score += 0.5; else score -= 1;
   }
-  const h = Number(member.heightCm) || Number(clinical?.body?.height) || null;
+  const h = Number(member.heightCm) || Number(clinical?.body?.heightCm) || null;
   if (h && (t.heightMin != null || t.heightMax != null)) {
     const lo = t.heightMin ?? 0, hi = t.heightMax ?? 250;
     if (h >= lo && h <= hi) { score += 1; why.push(`${h} cm`); }

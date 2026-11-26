@@ -15,6 +15,7 @@ import TeamProgress from './TeamProgress';
 import TeamProfile from './TeamProfile';
 import TeamBook from './TeamBook';
 import TeamNotifications from './TeamNotifications';
+import { DEFAULT_TEAM, usePublicSettings } from '../../lib/config';
 import TeamFood from './TeamFood';
 
 export async function googleSignIn() {
@@ -113,13 +114,14 @@ function TeamLogin() {
   );
 }
 
-const NAV = [
+const ALL_NAV = [
   ['', 'home', 'Inicio'],
   ['dieta', 'apple', 'Dieta'],
   ['comidas', 'fork', 'Comidas'],
   ['rutina', 'dumbbell', 'Rutina'],
   ['progreso', 'chart', 'Progreso'],
 ];
+const MODULE_OF = { dieta: 'dieta', comidas: 'comidas', rutina: 'rutina', progreso: 'progreso', reservar: 'reservar' };
 const SIDE_EXTRA = [['perfil', 'user', 'Mi perfil']];
 
 function TeamShell() {
@@ -146,6 +148,11 @@ function TeamShell() {
   }, [member.id, toast]);
 
   const unread = notifs.filter((n) => !n.read).length;
+  const cfg = usePublicSettings();
+  const mods = (cfg?.team || DEFAULT_TEAM).modules;
+  const on = (path) => !MODULE_OF[path] || mods[MODULE_OF[path]] !== false;
+  const NAV = ALL_NAV.filter(([to]) => on(to));
+  const guard = (path, el) => (on(path) ? el : <Navigate to="/team" replace />);
 
   return (
     <div className="app">
@@ -155,7 +162,7 @@ function TeamShell() {
           <NavLink key={to} to={`/team${to ? '/' + to : ''}`} end={!to} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name={ic} />{l}</NavLink>
         ))}
         {SIDE_EXTRA.map(([to, ic, l]) => <NavLink key={to} to={`/team/${to}`} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name={ic} />{l}</NavLink>)}
-        <NavLink to="/team/reservar" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name="calendar" />Reservar cita</NavLink>
+        {on('reservar') && <NavLink to="/team/reservar" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name="calendar" />Reservar cita</NavLink>}
         <NavLink to="/team/avisos" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon name="bell" />Avisos {unread > 0 && <span className="count">{unread}</span>}</NavLink>
         <div className="side-foot">
           <div className="row nowrap card flat" style={{ padding: 10 }}>
@@ -176,12 +183,12 @@ function TeamShell() {
         <main className="main">
           <Routes>
             <Route index element={<TeamHome unread={unread} />} />
-            <Route path="dieta" element={<TeamDiet />} />
-            <Route path="rutina" element={<TeamRoutine />} />
-            <Route path="progreso" element={<TeamProgress />} />
+            <Route path="dieta" element={guard('dieta', <TeamDiet />)} />
+            <Route path="rutina" element={guard('rutina', <TeamRoutine />)} />
+            <Route path="progreso" element={guard('progreso', <TeamProgress />)} />
             <Route path="perfil" element={<TeamProfile />} />
-            <Route path="comidas" element={<TeamFood />} />
-            <Route path="reservar" element={<TeamBook />} />
+            <Route path="comidas" element={guard('comidas', <TeamFood />)} />
+            <Route path="reservar" element={guard('reservar', <TeamBook />)} />
             <Route path="avisos" element={<TeamNotifications list={notifs} />} />
             <Route path="*" element={<Navigate to="/team" replace />} />
           </Routes>

@@ -12,7 +12,8 @@ import { clinicalText } from '../../data/clinical';
 import PlanTab from './PlanTab';
 import { ClinicalSheet, CredentialsCard } from './AdminBookings';
 import { mergeBookingAdmin, notifyMember, resetMemberAccess } from '../../lib/admin';
-import { ACTIVITY, BOOKING_STATUS, GOALS, SERVICES, ageFrom, cx, fmtDate, fullName, money, waLink } from '../../lib/utils';
+import { serviceName, useServices } from '../../lib/config';
+import { ACTIVITY, BOOKING_STATUS, GOALS, ageFrom, cx, fmtDate, fullName, money, waLink } from '../../lib/utils';
 
 const TABS = { consulta: 'Consulta', expediente: 'Expediente', dieta: 'Dieta', rutina: 'Rutina', progreso: 'Progreso', comidas: 'Comidas', citas: 'Citas', avisar: 'Notificar', acceso: 'Acceso' };
 
@@ -82,6 +83,7 @@ function NotifyTab({ m }) {
 }
 
 export default function AdminMember() {
+  const services = useServices();
   const { id } = useParams();
   const toast = useToast();
   const { data: m, loading } = useDoc(`members/${id}`);
@@ -160,7 +162,7 @@ export default function AdminMember() {
                   <tbody>{bookings.map((b) => (
                     <tr key={b.id}>
                       <td className="nowrap"><Link to={`/admin/reservaciones?id=${b.id}`}>{fmtDate(b.date)} · {b.time}</Link></td>
-                      <td>{SERVICES[b.service]?.short}</td>
+                      <td>{serviceName(services, b, true)}</td>
                       <td><Badge tone={BOOKING_STATUS[b.status]?.tone}>{BOOKING_STATUS[b.status]?.label}</Badge></td>
                       <td>{money(b.price ?? prices[b.service] ?? 0)}</td>
                       <td>{b.paid ? '✓' : '—'}</td>

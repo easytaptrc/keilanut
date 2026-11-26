@@ -51,7 +51,7 @@ function AdminAuth() {
       await b.commit();
       // Valores iniciales
       await setDoc(doc(db, 'settings', 'public'), { schedule: DEFAULT_SCHEDULE, whatsapp: '', instagram: '', address: '' }, { merge: true });
-      await setDoc(doc(db, 'settings', 'admin'), { prices: { online: 500, presencial: 500 }, anthropicKey: '', model: 'claude-opus-5-5' }, { merge: true });
+      await setDoc(doc(db, 'settings', 'admin'), { prices: { online: 500, presencial: 500 }, model: 'claude-opus-5-5' }, { merge: true });
       toast('Cuenta de administradora creada', 'ok');
       window.location.reload();
     } catch (e2) {

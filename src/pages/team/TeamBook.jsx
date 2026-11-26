@@ -4,9 +4,11 @@ import { useMemberBookings } from '../../lib/hooks';
 import BookingForm from '../../components/BookingForm';
 import { useSchedule } from '../Reservar';
 import { Badge, Empty, useToast } from '../../components/ui';
-import { BOOKING_STATUS, SERVICES, fmtDate } from '../../lib/utils';
+import { serviceName, useServices } from '../../lib/config';
+import { BOOKING_STATUS, fmtDate } from '../../lib/utils';
 
 export default function TeamBook() {
+  const services = useServices();
   const { member } = useSession();
   const schedule = useSchedule();
   const toast = useToast();
@@ -27,7 +29,7 @@ export default function TeamBook() {
               {sorted.map((b) => (
                 <div key={b.id} className="list-item" style={{ cursor: 'default' }}>
                   <div className="grow">
-                    <b className="small">{SERVICES[b.service]?.label}</b>
+                    <b className="small">{serviceName(services, b)}</b>
                     <div className="tiny muted">{fmtDate(b.date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · {b.time}</div>
                   </div>
                   <Badge tone={BOOKING_STATUS[b.status]?.tone}>{BOOKING_STATUS[b.status]?.label}</Badge>

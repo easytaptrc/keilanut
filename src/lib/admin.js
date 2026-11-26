@@ -39,11 +39,17 @@ export async function notifyMember(memberId, { title, body, type = 'mensaje' }) 
 }
 
 /** Acepta una reservación de alguien nuevo: crea ID, contraseña, cuenta y expediente. */
-export async function createMemberFromBooking(booking, priceDefault) {
-  const id = await nextMemberId();
+export async function createMemberFromBooking(booking, priceDefault, reviewWeeks = 3) {
   const password = genPassword(8);
-  const loginEmail = memberEmailFromId(id);
-  const uid = await createLogin(loginEmail, password);
+  // Si un ID ya está ocupado (por ejemplo, datos importados), se salta al siguiente
+  let id = null, uid = null, loginEmail = '';
+  for (let tries = 0; tries < 15 && !uid; tries++) {
+    id = await nextMemberId();
+    if ((await getDoc(doc(db, 'members', id))).exists()) continue;
+    loginEmail = memberEmailFromId(id);
+    try { uid = await createLogin(loginEmail, password); } catch (e) { if (e.code !== 'auth/email-already-in-use') throw e; }
+  }
+  if (!uid) throw new Error('No se pudo asignar un ID nuevo. Inténtalo de nuevo.');
   const profile = normalizeBooking(booking);
   const b = writeBatch(db);
   b.set(doc(db, 'members', id), {
@@ -55,7 +61,7 @@ export async function createMemberFromBooking(booking, priceDefault) {
     fcmTokens: [],
     firstBookingId: booking.id,
     lastVisit: booking.date || todayISO(),
-    nextReview: addDays(booking.date || todayISO(), 21),
+    nextReview: addDays(booking.date || todayISO(), (Number(reviewWeeks) || 3) * 7),
     createdAt: serverTimestamp(),
   });
   b.set(doc(db, 'logins', id), { email: loginEmail });
