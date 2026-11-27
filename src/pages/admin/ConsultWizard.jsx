@@ -3,6 +3,7 @@ import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useDoc } from '../../lib/hooks';
 import { activeBodyFields, activeClinicalSections, mergeClinicalForm, usePublicSettings } from '../../lib/config';
+import { FORMULAS, computeEnergy, mergeEnergy, personData } from '../../lib/energy';
 import { ACTIVITY, CLINICAL_GOAL_KEY, GOALS, ageFrom, bmi, bmiLabel, cx, fmtDate, todayISO } from '../../lib/utils';
 import { addDays } from '../../lib/admin';
 import { Choice, Field, Icon, Spinner, useToast } from '../../components/ui';
@@ -168,6 +169,17 @@ export default function ConsultWizard({ member, onDone }) {
                 </Field>
               ))}
             </div>
+            {(() => {
+              const cfg = mergeEnergy(adm.data?.energy);
+              const q = computeEnergy(personData({ ...member, ...profile }, { body }), { goal: profile.goal || member.goal || 'mantener' }, cfg);
+              return q.ok ? (
+                <div className="notice small energy-mini">
+                  <b>Cálculo rápido ({FORMULAS[cfg.formula].split(' (')[0]}):</b>
+                  <span>GEB {q.geb} kcal</span><span>GET {q.get} kcal</span><span>Consumir ≈ <b>{q.vct} kcal</b></span><span>Agua {q.water} L</span>
+                  <span className="muted">Ajusta todo en la pestaña Cálculo al terminar.</span>
+                </div>
+              ) : <div className="notice small">Con peso, estatura, sexo y fecha de nacimiento verás aquí las calorías del paciente.</div>;
+            })()}
             <ProgressPhotos member={member} by="admin" />
           </>
         )}

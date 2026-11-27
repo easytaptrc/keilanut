@@ -141,3 +141,62 @@ exports.generatePlan = onCall({ timeoutSeconds: 540, memory: '1GiB', maxInstance
     text: msg.content.filter((b) => b.type === 'text').map((b) => b.text).join(''),
   };
 });
+
+// ---------- Recepción: copias sin datos de salud ni precios ----------
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const AGENDA_KEYS = ['firstName', 'lastName', 'phone', 'email', 'service', 'serviceLabel', 'date', 'time', 'status', 'memberId', 'source', 'staffNote', 'createdAt'];
+const DIR_KEYS = ['firstName', 'lastName', 'phone', 'email', 'active'];
+const pick = (d, keys) => Object.fromEntries(keys.filter((k) => d[k] !== undefined).map((k) => [k, d[k]]));
+const agendaOf = (b) => ({ ...pick(b, AGENDA_KEYS), memberId: b.memberId || null });
+const directoryOf = (m) => ({ ...pick(m, DIR_KEYS), active: m.active !== false });
+
+exports.syncAgenda = onDocumentWritten('bookings/{id}', async (event) => {
+  const after = event.data?.after;
+  const before = event.data?.before;
+  const ref = db.doc(`agenda/${event.params.id}`);
+  if (!after?.exists) { await ref.delete().catch(() => {}); return; }
+  const b = after.data();
+  await ref.set(agendaOf(b));
+  // Avisos al paciente por acciones de recepción (los genera el servidor: recepción no puede escribir texto libre)
+  if (!b.memberId || !/^\d{4}-\d{2}-\d{2}$/.test(b.date || '')) return;
+  const when = `${human(b.date)} a las ${b.time}`;
+  let n = null;
+  if (!before?.exists && b.source === 'recepcion') {
+    n = b.status === 'aceptada'
+      ? { title: 'Cita agendada', body: `Tienes cita el ${when}${b.serviceLabel ? ` (${b.serviceLabel})` : ''}.` }
+      : { title: 'Cita por confirmar', body: `Registramos tu cita del ${when}. Keila la confirmará pronto.` };
+  } else if (before?.exists && before.data().status !== b.status && b.updatedBy) {
+    const byStaff = (await db.doc(`staff/${b.updatedBy}`).get()).exists || (await db.doc(`admins/${b.updatedBy}`).get()).exists;
+    if (byStaff && b.status === 'aceptada') n = { title: 'Cita confirmada', body: `Tu cita del ${when} está confirmada.` };
+    if (byStaff && ['rechazada', 'cancelada'].includes(b.status)) n = { title: 'Cita cancelada', body: `Tu cita del ${when} fue cancelada. Si necesitas otra fecha, agenda desde tu app o escríbenos.` };
+  }
+  if (n) await db.collection(`members/${b.memberId}/notifications`).add({ ...n, type: 'booking', read: false, createdAt: FieldValue.serverTimestamp() });
+});
+
+exports.syncDirectory = onDocumentWritten('members/{id}', async (event) => {
+  const after = event.data?.after;
+  const ref = db.doc(`directory/${event.params.id}`);
+  if (!after?.exists) { await ref.delete().catch(() => {}); return; }
+  await ref.set(directoryOf(after.data()));
+});
+
+/** Reconstruye la agenda y el directorio de recepción a partir de todas las citas y pacientes (solo administradora). */
+exports.rebuildAgenda = onCall({ timeoutSeconds: 300, memory: '512MiB' }, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Inicia sesión como administradora.');
+  if (!(await db.doc(`admins/${req.auth.uid}`).get()).exists) throw new HttpsError('permission-denied', 'Solo la administradora.');
+  let n = 0;
+  const flush = async (ops) => { for (let i = 0; i < ops.length; i += 400) { const b = db.batch(); ops.slice(i, i + 400).forEach(([ref, data]) => b.set(ref, data)); await b.commit(); } };
+  const bookings = await db.collection('bookings').get();
+  await flush(bookings.docs.map((d) => [db.doc(`agenda/${d.id}`), agendaOf(d.data())]));
+  n += bookings.size;
+  const members = await db.collection('members').get();
+  await flush(members.docs.map((d) => [db.doc(`directory/${d.id}`), directoryOf(d.data())]));
+  // Quita copias huérfanas
+  const ids = new Set(bookings.docs.map((d) => d.id));
+  const orphan = (await db.collection('agenda').get()).docs.filter((d) => !ids.has(d.id));
+  for (const d of orphan) await d.ref.delete();
+  const mids = new Set(members.docs.map((d) => d.id));
+  const orphanDir = (await db.collection('directory').get()).docs.filter((d) => !mids.has(d.id));
+  for (const d of orphanDir) await d.ref.delete();
+  return { bookings: bookings.size, members: members.size, removed: orphan.length, total: n };
+});

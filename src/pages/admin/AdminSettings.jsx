@@ -9,6 +9,8 @@ import ServicesSettings from './settings/ServicesSettings';
 import ScheduleSettings from './settings/ScheduleSettings';
 import { BookingFormSettings, ClinicalFormSettings } from './settings/FormsSettings';
 import { AISettings, AccountSettings, TeamSettings } from './settings/OtherSettings';
+import EnergySettings from './settings/EnergySettings';
+import StaffSettings from './settings/StaffSettings';
 
 const TABS = [
   ['sitio', 'home', 'Sitio y contacto'],
@@ -16,8 +18,10 @@ const TABS = [
   ['horario', 'calendar', 'Horario de citas'],
   ['reservacion', 'list', 'Preguntas de reservación'],
   ['historial', 'file', 'Historial clínico'],
+  ['calculo', 'chart', 'Cálculo energético'],
   ['paciente', 'users', 'App del paciente'],
   ['ia', 'sparkle', 'Inteligencia artificial'],
+  ['equipo', 'users', 'Recepción y equipo'],
   ['cuenta', 'lock', 'Cuenta y respaldo'],
 ];
 
@@ -48,6 +52,8 @@ export default function AdminSettings() {
           {tab === 'historial' && <ClinicalFormSettings adm={a} />}
           {tab === 'paciente' && <TeamSettings pub={p} />}
           {tab === 'ia' && <AISettings adm={a} />}
+          {tab === 'calculo' && <EnergySettings adm={a} />}
+          {tab === 'equipo' && <StaffSettings />}
           {tab === 'cuenta' && <AccountSettings />}
         </div>
       </div>

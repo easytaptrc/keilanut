@@ -63,7 +63,9 @@ export function profileSummary(p, { progress = [], clinical = null } = {}) {
     p.mealsPerDay && `Comidas al día que mejor se adaptan: ${p.mealsPerDay}`,
     ...[...(p.extra || []), ...(p.bookingExtra || [])].filter((x) => x?.label && x?.value).map((x) => `${x.label}: ${x.value}`),
     p.trainingDays && `Días de entrenamiento por semana: ${p.trainingDays} · Experiencia: ${p.trainingExperience || '?'}`,
-    e && `Referencia calculada (Mifflin-St Jeor): TMB ${e.bmr} kcal, GET ${e.tdee} kcal, sugerido ${e.kcal} kcal (P ${e.protein} g, C ${e.carbs} g, G ${e.fat} g), agua ${e.water} L`,
+    clinical?.energy?.results
+      ? `CÁLCULO ENERGÉTICO DE LA NUTRIÓLOGA (úsalo como meta obligatoria): GEB ${clinical.energy.results.geb} kcal, GET ${clinical.energy.results.get} kcal, CONSUMIR ${clinical.energy.results.vct} kcal al día; proteína ${clinical.energy.results.protein} g, hidratos ${clinical.energy.results.carbs} g, lípidos ${clinical.energy.results.fat} g; agua ${clinical.energy.results.water} L`
+      : e && `Referencia calculada (Mifflin-St Jeor): TMB ${e.bmr} kcal, GET ${e.tdee} kcal, sugerido ${e.kcal} kcal (P ${e.protein} g, C ${e.carbs} g, G ${e.fat} g), agua ${e.water} L`,
   ].filter(Boolean);
   if (clinical?.body) {
     const custom = clinical._bodyLabels || {};

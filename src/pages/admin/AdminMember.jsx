@@ -8,6 +8,7 @@ import ProgressPanel from '../../components/ProgressPanel';
 import ProgressPhotos from '../../components/ProgressPhotos';
 import FoodLog from '../../components/FoodLog';
 import ConsultWizard from './ConsultWizard';
+import EnergyPanel from '../../components/EnergyPanel';
 import { clinicalText } from '../../data/clinical';
 import PlanTab from './PlanTab';
 import { ClinicalSheet, CredentialsCard } from './AdminBookings';
@@ -15,7 +16,7 @@ import { mergeBookingAdmin, notifyMember, resetMemberAccess } from '../../lib/ad
 import { serviceName, useServices } from '../../lib/config';
 import { ACTIVITY, BOOKING_STATUS, GOALS, ageFrom, cx, fmtDate, fullName, money, waLink } from '../../lib/utils';
 
-const TABS = { consulta: 'Consulta', expediente: 'Expediente', dieta: 'Dieta', rutina: 'Rutina', progreso: 'Progreso', comidas: 'Comidas', citas: 'Citas', avisar: 'Notificar', acceso: 'Acceso' };
+const TABS = { consulta: 'Consulta', calculo: 'Cálculo', expediente: 'Expediente', dieta: 'Dieta', rutina: 'Rutina', progreso: 'Progreso', comidas: 'Comidas', citas: 'Citas', avisar: 'Notificar', acceso: 'Acceso' };
 
 const EDITABLE = [
   ['firstName', 'Nombre(s)'], ['lastName', 'Apellidos'], ['email', 'Correo (Google)'], ['phone', 'Teléfono'], ['birthDate', 'Nacimiento', 'date'],
@@ -131,11 +132,12 @@ export default function AdminMember() {
       </div>
 
       <div className="tabs">
-        {Object.entries(TABS).map(([k, l]) => <button key={k} className={cx('tab', tab === k && 'on')} onClick={() => setTab(k)}>{l}</button>)}
+        {Object.entries(TABS).map(([k, l]) => <button key={k} className={cx('tab', tab === k && 'on')} onClick={() => { if (k !== tab && document.querySelector('.main .save-bar .small') && !window.confirm('Tienes cambios sin guardar en esta pestaña. ¿Salir sin guardar?')) return; setTab(k); }}>{l}</button>)}
       </div>
 
       <div className="fade-in" key={tab}>
-        {tab === 'consulta' && <ConsultWizard member={m} onDone={() => setTab('expediente')} />}
+        {tab === 'consulta' && <ConsultWizard member={m} onDone={() => setTab('calculo')} />}
+        {tab === 'calculo' && <EnergyPanel member={m} />}
         {tab === 'expediente' && (
           <div className="stack">
             <div className="row">
@@ -145,7 +147,18 @@ export default function AdminMember() {
               <button className="btn sm" onClick={() => setTab('consulta')}><Icon name="edit" size={16} /> {clinical ? 'Editar consulta' : 'Iniciar consulta'}</button>
             </div>
             <ClinicalSheet p={m} />
-            {clinical ? <div className="card"><h4>Historial clínico nutricional</h4><pre className="clinical-pre">{clinicalText(clinical) || 'Sin respuestas todavía.'}</pre></div>
+            {clinical?.energy?.results && (
+              <div className="card flat row between">
+                <div className="energy-mini small">
+                  <b>Cálculo energético</b>
+                  <span>GEB {clinical.energy.results.geb} kcal</span><span>GET {clinical.energy.results.get} kcal</span>
+                  <span>Consumir <b>{clinical.energy.results.vct} kcal</b></span>
+                  <span>P {clinical.energy.results.protein} g · HC {clinical.energy.results.carbs} g · L {clinical.energy.results.fat} g</span>
+                </div>
+                <button className="btn light sm" onClick={() => setTab('calculo')}>Ver cálculo</button>
+              </div>
+            )}
+            {clinical ?<div className="card"><h4>Historial clínico nutricional</h4><pre className="clinical-pre">{clinicalText(clinical) || 'Sin respuestas todavía.'}</pre></div>
               : <div className="notice">Aún no hay historial clínico. Cuando llegue {m.firstName} a consulta, usa la pestaña <b>Consulta</b>.</div>}
           </div>
         )}

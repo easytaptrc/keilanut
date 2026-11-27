@@ -6,7 +6,7 @@ import { auth, db } from '../firebase';
 const Ctx = createContext(null);
 
 export function SessionProvider({ children }) {
-  const [state, setState] = useState({ user: undefined, isAdmin: false, member: null, ready: false });
+  const [state, setState] = useState({ user: undefined, isAdmin: false, staff: null, member: null, ready: false });
 
   useEffect(() => {
     let unsubMember = null;
@@ -14,13 +14,23 @@ export function SessionProvider({ children }) {
       unsubMember?.();
       unsubMember = null;
       if (!user) {
-        setState({ user: null, isAdmin: false, member: null, ready: true });
+        setState({ user: null, isAdmin: false, staff: null, member: null, ready: true });
         return;
       }
       let isAdmin = false;
       try {
         isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists();
       } catch { /* sin permiso => no es admin */ }
+
+      // Recepción (cuenta creada por la administradora)
+      let staff = null;
+      if (!isAdmin) {
+        try {
+          const s = await getDoc(doc(db, 'staff', user.uid));
+          if (s.exists()) staff = { uid: user.uid, ...s.data() };
+        } catch { /* sin permiso */ }
+      }
+      if (staff) { setState({ user, isAdmin: false, staff, member: null, ready: true }); return; }
 
       let memberId = null;
       if (!isAdmin) {
@@ -37,10 +47,10 @@ export function SessionProvider({ children }) {
 
       if (memberId) {
         unsubMember = onSnapshot(doc(db, 'members', memberId), (d) => {
-          setState({ user, isAdmin, member: d.exists() ? { id: d.id, ...d.data() } : null, ready: true });
+          setState({ user, isAdmin, staff: null, member: d.exists() ? { id: d.id, ...d.data() } : null, ready: true });
         });
       } else {
-        setState({ user, isAdmin, member: null, ready: true });
+        setState({ user, isAdmin, staff: null, member: null, ready: true });
       }
     });
     return () => { unsub(); unsubMember?.(); };

@@ -33,6 +33,19 @@ Panel → **Ajustes**, por secciones:
   propias reglas para la IA.
 - **Cuenta y respaldo:** cambiar contraseña y descargar un respaldo completo de los datos (JSON).
 
+## Cálculo energético (expediente → pestaña **Cálculo**)
+Con los datos de la báscula y el perfil (peso, estatura, edad, sexo, % grasa):
+- **GEB** con Harris-Benedict (el de tus Excel), Mifflin-St Jeor, Katch-McArdle (masa magra) y FAO/OMS, lado a lado.
+- **GET** como en tu Excel (GEB + ETA 10% + actividad %), por **METs** (MET × 0.0175 × peso × minutos, con días por
+  semana) o con factor de actividad.
+- **Calorías a consumir** según el objetivo (déficit/superávit), **macros** en g/kg (proteína e hidratos; lípidos lo
+  que resta), agua, peso ajustado en obesidad y avisos (lípidos < 20%, déficit agresivo…).
+- **Cuadro dietosintético** con equivalentes SMAE por tiempo de comida y % de adecuación.
+- **Sugerencias personalizadas** (IMC, cintura, grasa visceral, sueño, estrés, diagnósticos, progreso…) que puedes
+  enviar al paciente como aviso.
+- “Guardar cálculo” lo deja en el expediente; en la Dieta, “Usar mi cálculo” llena calorías y macros, y la IA lo usa.
+- Todo se configura en **Ajustes → Cálculo energético**.
+
 ## Cómo funciona
 
 ### Reservación (público)

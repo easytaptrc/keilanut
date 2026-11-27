@@ -8,6 +8,7 @@ import { ACTIVITY, BOOKING_STATUS, GOALS, ageFrom, bmi, bmiLabel, cx, fmtDate, f
 import { serviceName, usePublicSettings, useServices } from '../../lib/config';
 import { addDays, createMemberFromBooking, mergeBookingAdmin, notifyMember, saveBookingAdmin } from '../../lib/admin';
 import { normalizeBooking } from '../../components/BookingForm';
+import Agenda from '../../components/Agenda';
 
 export function ClinicalSheet({ p }) {
   const age = ageFrom(p.birthDate);
@@ -32,6 +33,7 @@ export function ClinicalSheet({ p }) {
     ]],
 
     ...(extra.length ? [["Preguntas adicionales", extra.map((x) => [x.label, x.value])]] : []),
+    ...(p.staffNote ? [["Recepción", [["Comentario de recepción", p.staffNote]]]] : []),
   ];
   return (
     <div className="grid g2">
@@ -174,6 +176,8 @@ export default function AdminBookings() {
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState('pendiente');
   const [q, setQ] = useState('');
+  const view = params.get('vista') === 'calendario' ? 'calendario' : 'lista';
+  const setView = (v) => setParams(v === 'calendario' ? { vista: 'calendario' } : {});
   const raw = useCol('bookings', () => [orderBy('createdAt', 'desc')], 'bookings-admin');
   const priv = useCol('bookingAdmin', null, 'booking-admin-private').list;
   const loading = raw.loading;
@@ -195,7 +199,14 @@ export default function AdminBookings() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <div className="topbar"><h1>Reservaciones</h1></div>
+      <div className="topbar">
+        <h1>Reservaciones</h1>
+        <div className="tabs">
+          <button className={cx('tab', view === 'lista' && 'on')} onClick={() => setView('lista')}><Icon name="list" size={14} /> Lista</button>
+          <button className={cx('tab', view === 'calendario' && 'on')} onClick={() => setView('calendario')}><Icon name="calendar" size={14} /> Calendario</button>
+        </div>
+      </div>
+      {view === 'calendario' ? <Agenda mode="admin" /> : <>
       <div className="row between">
         <div className="tabs">
           {Object.entries(FILTERS).map(([k, l]) => (
@@ -221,6 +232,7 @@ export default function AdminBookings() {
           </div>
         )}
       </div>
+      </>}
       {open && <BookingDetail key={open.id} b={open} prices={prices} onClose={() => setParams({})} />}
     </div>
   );

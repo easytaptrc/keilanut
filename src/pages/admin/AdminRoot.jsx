@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, writeBatch, where } from 'firebase/firestore';
@@ -17,8 +17,10 @@ import AdminTemplates from './AdminTemplates';
 import AdminNotify from './AdminNotify';
 import AdminSettings from './AdminSettings';
 
+const ReceptionApp = lazy(() => import('../reception/ReceptionApp'));
+
 function AdminAuth() {
-  const { user, isAdmin, logout } = useSession();
+  const { user, isAdmin, staff, logout } = useSession();
   const toast = useToast();
   const [boot, setBoot] = useState(null); // null cargando, true existe admin, false no existe
   const [f, setF] = useState({ name: '', email: '', password: '', confirm: '' });
@@ -74,12 +76,13 @@ function AdminAuth() {
           {user && !isAdmin ? (
             <div className="stack mt">
               <h2>Sin acceso</h2>
-              <div className="error">La cuenta {user.email || ''} no es administradora.</div>
+              <div className="error">{staff && staff.active === false ? `La cuenta de recepción ${user.email || ''} está desactivada. Pide a Keila que la active.` : `La cuenta ${user.email || ''} no es administradora.`}</div>
               <button className="btn ghost" onClick={logout}>Cerrar sesión</button>
             </div>
           ) : boot === null ? <PageLoader /> : boot ? (
             <form className="stack mt" onSubmit={login}>
-              <h2>Bienvenida, Keila</h2>
+              <h2>Bienvenida</h2>
+              <p className="small muted" style={{ margin: 0 }}>Panel de Keila y acceso de recepción.</p>
               <Field label="Correo"><input className="input" type="email" value={f.email} onChange={set('email')} autoComplete="username" required /></Field>
               <Field label="Contraseña"><input className="input" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" required /></Field>
               {err && <div className="error">{err}</div>}
@@ -178,7 +181,9 @@ function AdminShell() {
 }
 
 export default function AdminRoot() {
-  const { ready, isAdmin } = useSession();
+  const { ready, isAdmin, staff } = useSession();
   if (!ready) return <PageLoader />;
-  return isAdmin ? <AdminShell /> : <AdminAuth />;
+  if (isAdmin) return <AdminShell />;
+  if (staff?.active) return <Suspense fallback={<PageLoader />}><ReceptionApp /></Suspense>;
+  return <AdminAuth />;
 }

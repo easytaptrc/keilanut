@@ -122,3 +122,11 @@ export function mergeBookingAdmin(bookings, adminList) {
     return { ...b, price: a.price ?? b.price ?? null, paid: a.paid ?? b.paid ?? false, adminNotes: a.adminNotes ?? b.adminNotes ?? '', _legacyPrivate: legacy };
   });
 }
+
+/** Da de alta una cuenta de recepción (agenda y citas, sin acceso a expedientes ni precios). */
+export async function createStaffAccount({ name, email }) {
+  const password = genPassword(10);
+  const uid = await createLogin(String(email).trim().toLowerCase(), password);
+  await setDoc(doc(db, 'staff', uid), { name: String(name).trim(), email: String(email).trim().toLowerCase(), role: 'recepcion', active: true, createdAt: serverTimestamp() });
+  return { uid, password };
+}

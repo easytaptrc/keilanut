@@ -152,7 +152,12 @@ export default function PlanTab({ member, kind }) {
             <button className="btn sage sm" onClick={() => setAi({ selected: templates.slice(0, 3).map((t) => t.id), instructions: '', base: 'auto', running: false })}><Icon name="sparkle" size={16} /> Generar con IA</button>
           </div>
         </div>
-        {isDiet && e && <div className="small muted mt">Referencia: GET {e.tdee} kcal · sugerido {e.kcal} kcal · P {e.protein} g · C {e.carbs} g · G {e.fat} g · agua {e.water} L</div>}
+        {isDiet && clinical?.energy?.results ? (
+          <div className="row mt" style={{ gap: 10 }}>
+            <span className="small"><b>Tu cálculo:</b> GET {clinical.energy.results.get} kcal · consumir <b>{clinical.energy.results.vct} kcal</b> · P {clinical.energy.results.protein} g · HC {clinical.energy.results.carbs} g · L {clinical.energy.results.fat} g · agua {clinical.energy.results.water} L</span>
+            <button type="button" className="btn light xs" onClick={() => { const r = clinical.energy.results; change({ ...value, calories: r.vct, macros: { protein: r.protein, carbs: r.carbs, fat: r.fat }, waterLiters: r.water }); toast('Calorías, macros y agua tomados de tu cálculo', 'ok'); }}>Usar mi cálculo</button>
+          </div>
+        ) : isDiet && e && <div className="small muted mt">Referencia (Mifflin): GET {e.tdee} kcal · sugerido {e.kcal} kcal · P {e.protein} g · C {e.carbs} g · G {e.fat} g · agua {e.water} L. Para usar tus fórmulas, abre la pestaña <b>Cálculo</b>.</div>}
       </div>
 
       <div className="row between">

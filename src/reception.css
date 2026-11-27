@@ -1,0 +1,29 @@
+/* ---------- Agenda (recepción y panel) ---------- */
+.agenda { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .agenda { grid-template-columns: minmax(0, 1fr); } }
+.agenda-cal { padding: 14px; }
+.ag-day { position: relative; aspect-ratio: 1; min-height: 40px; border: 1px solid transparent; border-radius: 12px; background: transparent; font: inherit; font-weight: 600; font-size: 0.92rem; color: var(--ink); cursor: pointer; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
+.ag-day:hover { background: var(--bg-2); }
+.ag-day.has { background: var(--sage-ghost); }
+.ag-day.today { border-color: var(--sand); }
+.ag-day.on { background: var(--wine); color: #fff; }
+.ag-day em { position: absolute; top: 2px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--sage); color: #fff; font-style: normal; font-size: 10px; line-height: 16px; text-align: center; }
+.ag-day em.pend { background: var(--mocha); }
+.ag-day.on em { background: #fff; color: var(--wine); }
+.ag-legend { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--mocha); vertical-align: middle; }
+.ag-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; flex-wrap: wrap; }
+.ag-item.off { opacity: 0.55; }
+.ag-time { font-weight: 800; font-size: 1.05rem; color: var(--wine); min-width: 52px; }
+.ag-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-left: auto; }
+@media (max-width: 480px) { .ag-actions { width: 100%; justify-content: flex-end; } }
+.ag-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+.ag-pick button { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; cursor: pointer; font: inherit; }
+.ag-pick button:hover { border-color: var(--rose); }
+
+/* ---------- App de recepción ---------- */
+.rec-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.rec-main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; display: flex; flex-direction: column; gap: 18px; }
+@media (max-width: 600px) { .rec-main { padding: 14px 12px 50px; } .rec-top { padding: 10px 12px; } }
+.rec-up { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.staff-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; }
+.staff-row.off { opacity: 0.6; }
